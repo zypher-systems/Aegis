@@ -1,0 +1,354 @@
+name: aegis
+
+# Production-style multi-container stack. The dashboard (aegis-web) is built
+# separately; during Milestone 1 bring-up you can run the API + proxy + data
+# stores alone and drive the API with curl.
+#
+# Required in .env (compose fails closed if any are empty):
+#   AEGIS_SECRET_KEY, AEGIS_ENROLL_TOKEN, POSTGRES_PASSWORD,
+#   CROWDSEC_BOUNCER_KEY, CROWDSEC_FIREWALL_KEY
+# Copy .env.example and fill those in. There are no in-file toy passwords.
+
+x-restart: &restart
+  restart: unless-stopped
+
+# Every container's stdout/stderr is capped (5 × 20 MB) so a scanner
+# campaign or a chatty upstream cannot fill the Docker data root and take
+# Postgres down with it. The proxy's access log rotates itself (see
+# docs/configuration.md).
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  postgres:
+    <<: [*restart, *logging]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: aegis
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: aegis
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegis"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 64M
+    networks: [aegis]
+
+  redis:
+    <<: [*restart, *logging]
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+        reservations:
+          memory: 32M
+    networks: [aegis]
+
+  api:
+    <<: [*restart, *logging]
+    # Drains REST, node streams and telemetry before exiting (20 s budget).
+    stop_grace_period: 30s
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.api
+      args:
+        GEOIP_MONTH: ${GEOIP_MONTH:-}
+        AEGIS_VERSION: ${AEGIS_VERSION:-1.8.0}
+    image: aegis-api:dev
+    environment:
+      AEGIS_HTTP_ADDR: ":8080"
+      AEGIS_GRPC_ADDR: ":9443"     # mTLS node plane (config/telemetry)
+      AEGIS_ENROLL_ADDR: ":9444"   # TLS enrollment plane (token)
+      AEGIS_DATABASE_URL: postgres://aegis:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/aegis?sslmode=disable
+      AEGIS_REDIS_ADDR: redis:6379
+      AEGIS_SECRET_KEY: ${AEGIS_SECRET_KEY:?set AEGIS_SECRET_KEY (base64 32 bytes)}
+      AEGIS_ENROLL_TOKEN: ${AEGIS_ENROLL_TOKEN:?set AEGIS_ENROLL_TOKEN}
+      AEGIS_SELFSIGNED: ${AEGIS_SELFSIGNED:-true}
+      AEGIS_ACME_EMAIL: ${AEGIS_ACME_EMAIL:-}
+      AEGIS_ACME_DIRECTORY: ${AEGIS_ACME_DIRECTORY:-https://acme-v02.api.letsencrypt.org/directory}
+      AEGIS_ACME_SKIP_TLS: ${AEGIS_ACME_SKIP_TLS:-false}
+      AEGIS_CF_API_TOKEN: ${AEGIS_CF_API_TOKEN:-}
+      AEGIS_PUBLIC_ORIGIN: ${AEGIS_PUBLIC_ORIGIN:-http://127.0.0.1:3300}
+      AEGIS_VERSION: ${AEGIS_VERSION:-1.8.0}
+      AEGIS_GEOIP_MMDB: ${AEGIS_GEOIP_MMDB:-/usr/share/aegis/geoip/country.mmdb}
+      AEGIS_TRUSTED_PROXY_CIDRS: ${AEGIS_TRUSTED_PROXY_CIDRS:-}
+      AEGIS_METRICS_TOKEN: ${AEGIS_METRICS_TOKEN:-}
+      AEGIS_REQUEST_LOG: ${AEGIS_REQUEST_LOG:-all}
+      AEGIS_REQUEST_LOG_DAYS: ${AEGIS_REQUEST_LOG_DAYS:-7}
+      AEGIS_SECURITY_LOG_DAYS: ${AEGIS_SECURITY_LOG_DAYS:-30}
+      AEGIS_CROWDSEC_URL: http://crowdsec:8080
+      AEGIS_CROWDSEC_KEY: ${CROWDSEC_BOUNCER_KEY:?set CROWDSEC_BOUNCER_KEY}
+      AEGIS_CROWDSEC_CONTROL_DIR: /var/lib/aegis/crowdsec-control
+      AEGIS_CROWDSEC_MACHINE_ID: ${CROWDSEC_MACHINE_ID:-aegis-api}
+      AEGIS_CROWDSEC_MACHINE_PASSWORD: ${CROWDSEC_MACHINE_PASSWORD:-}
+    volumes:
+      - crowdsec-control:/var/lib/aegis/crowdsec-control
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      crowdsec:
+        condition: service_started
+      crowdsec-control-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/aegis-api", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 64M
+    ports:
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-18080}:8080"
+    networks: [aegis]
+
+  proxy:
+    <<: [*restart, *logging]
+    # Stops accepting, finishes in-flight requests, then gives WebSockets and
+    # streams the rest of the budget before closing them (25 s).
+    stop_grace_period: 30s
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.proxy
+      args:
+        GEOIP_MONTH: ${GEOIP_MONTH:-}
+        AEGIS_VERSION: ${AEGIS_VERSION:-1.8.0}
+    image: aegis-proxy:dev
+    environment:
+      AEGIS_CONTROL_PLANE: api:9444
+      AEGIS_NODE_PLANE: api:9443
+      AEGIS_ENROLL_TOKEN: ${AEGIS_ENROLL_TOKEN:?set AEGIS_ENROLL_TOKEN}
+      AEGIS_NODE_NAME: aegis-proxy-1
+      AEGIS_HTTP_ADDR: ":80"
+      AEGIS_HTTPS_ADDR: ":443"
+      AEGIS_STATE_DIR: /var/lib/aegis-proxy
+      AEGIS_REDIS_ADDR: redis:6379
+      AEGIS_VERSION: ${AEGIS_VERSION:-1.8.0}
+      AEGIS_GEOIP_MMDB: ${AEGIS_GEOIP_MMDB:-/usr/share/aegis/geoip/country.mmdb}
+      AEGIS_TRUSTED_PROXY_CIDRS: ${AEGIS_TRUSTED_PROXY_CIDRS:-}
+      AEGIS_ERROR_PAGE: ${AEGIS_ERROR_PAGE:-}
+      AEGIS_UNKNOWN_HOST: ${AEGIS_UNKNOWN_HOST:-drop}
+      AEGIS_ACCESS_LOG: /var/log/aegis/access.log
+    volumes:
+      - proxystate:/var/lib/aegis-proxy
+      - aegis-logs:/var/log/aegis
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/aegis-proxy", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          memory: 128M
+    ports:
+      - "${PROXY_HTTP_PORT:-80}:80"
+      - "${PROXY_HTTPS_PORT:-443}:443"
+      # Stream e2e / local range. Production stream ports must be published
+      # explicitly (or host-network the proxy).
+      - "19000-19002:19000-19002"
+    networks: [aegis]
+
+  web:
+    <<: [*restart, *logging]
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.web
+      args:
+        AEGIS_API_INTERNAL: http://api:8080
+        AEGIS_VERSION: ${AEGIS_VERSION:-1.8.0}
+    image: aegis-web:dev
+    environment:
+      AEGIS_API_INTERNAL: http://api:8080
+      AEGIS_VERSION: ${AEGIS_VERSION:-1.8.0}
+      PORT: "3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+        reservations:
+          memory: 32M
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-3300}:3000"
+    networks: [aegis]
+
+  # Let's Encrypt Pebble (ACME test CA). Start with: docker compose --profile e2e up -d
+  pebble:
+    <<: *logging
+    profiles: ["e2e"]
+    image: ghcr.io/letsencrypt/pebble:latest
+    command: ["-config", "/test/config/pebble-config.json"]
+    environment:
+      PEBBLE_VA_ALWAYS_VALID: "1"
+      PEBBLE_VA_NOSLEEP: "1"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+    networks: [aegis]
+
+  # Demo upstream for the e2e happy path.
+  demo:
+    <<: [*restart, *logging]
+    image: traefik/whoami:latest
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
+    networks: [aegis]
+
+  # In-stack CrowdSec LAPI. CAPI (community lists) is on. Aegis is the L7
+  # bouncer; this container acquires nginx-combined logs from the proxy.
+  crowdsec:
+    <<: [*restart, *logging]
+    image: crowdsecurity/crowdsec:v1.6.8
+    environment:
+      COLLECTIONS: "crowdsecurity/nginx crowdsecurity/base-http-scenarios"
+      BOUNCER_KEY_aegis: ${CROWDSEC_BOUNCER_KEY:?set CROWDSEC_BOUNCER_KEY}
+      BOUNCER_KEY_firewall: ${CROWDSEC_FIREWALL_KEY:?set CROWDSEC_FIREWALL_KEY}
+      CUSTOM_HOSTNAME: aegis
+      # Console enrollment is optional; CAPI machine registration still runs.
+      ENROLL_KEY: ${CROWDSEC_ENROLL_KEY:-}
+      ENROLL_INSTANCE_NAME: aegis
+    volumes:
+      - crowdsec-data:/var/lib/crowdsec/data
+      - crowdsec-config:/etc/crowdsec
+      - aegis-logs:/var/log/aegis:ro
+      - ./deploy/crowdsec/acquis.yaml:/etc/crowdsec/acquis.d/aegis.yaml:ro
+    ports:
+      - "127.0.0.1:${CROWDSEC_LAPI_PORT:-18081}:8080"
+    healthcheck:
+      test: ["CMD", "cscli", "lapi", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768M
+        reservations:
+          memory: 128M
+    networks: [aegis]
+
+  # Named volume for firewall.enabled (1/0). API is distroless non-root and
+  # must be able to write the flag; the bouncer only reads it.
+  crowdsec-control-init:
+    <<: *logging
+    image: alpine:3.20
+    volumes:
+      - crowdsec-control:/control
+    command:
+      - /bin/sh
+      - -c
+      - mkdir -p /control && chmod 0777 /control && if [ ! -f /control/firewall.enabled ]; then printf '1\n' > /control/firewall.enabled; fi && chmod 0666 /control/firewall.enabled
+    restart: "no"
+
+  crowdsec-init:
+    <<: *logging
+    image: crowdsecurity/crowdsec:v1.6.8
+    depends_on:
+      crowdsec:
+        condition: service_healthy
+    network_mode: service:crowdsec
+    environment:
+      CROWDSEC_MACHINE_ID: ${CROWDSEC_MACHINE_ID:-aegis-api}
+      CROWDSEC_MACHINE_PASSWORD: ${CROWDSEC_MACHINE_PASSWORD:-}
+    volumes:
+      - crowdsec-data:/var/lib/crowdsec/data
+      - crowdsec-config:/etc/crowdsec
+      - ./deploy/crowdsec/init-allowlist.sh:/init-allowlist.sh:ro
+    entrypoint: ["/bin/sh", "/init-allowlist.sh"]
+    restart: "no"
+
+  # Box-level nftables bouncer. Whole-host, not per-vhost. LAN is allowlisted
+  # in LAPI so SSH and the dashboard stay reachable. CI disables this service.
+  crowdsec-firewall:
+    <<: *logging
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.firewall-bouncer
+    image: aegis-crowdsec-firewall:dev
+    network_mode: host
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      API_KEY: ${CROWDSEC_FIREWALL_KEY:?set CROWDSEC_FIREWALL_KEY}
+      CONTROL_DIR: /control
+    volumes:
+      - crowdsec-control:/control
+    depends_on:
+      crowdsec:
+        condition: service_healthy
+      crowdsec-control-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+volumes:
+  pgdata:
+  redisdata:
+  proxystate:
+  crowdsec-data:
+  crowdsec-config:
+  crowdsec-control:
+  aegis-logs:
+
+networks:
+  aegis:
+    driver: bridge

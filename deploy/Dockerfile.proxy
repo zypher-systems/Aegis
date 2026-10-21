@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1
+
+# DB-IP IP to Country Lite (CC BY 4.0). Not MaxMind GeoLite2 — that cannot
+# be redistributed. Pass GEOIP_MONTH=YYYY-MM in CI to bust the download cache.
+FROM debian:bookworm-slim AS geoip
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gzip \
+    && rm -rf /var/lib/apt/lists/*
+COPY deploy/fetch-dbip-country.sh /fetch-dbip-country.sh
+ARG GEOIP_MONTH=
+RUN /bin/sh /fetch-dbip-country.sh /out/geoip/country.mmdb "$GEOIP_MONTH" \
+    && chmod 0755 /out/geoip && chmod 0644 /out/geoip/country.mmdb
+
+# Build the data-plane binary.
+FROM golang:1.25-bookworm AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY gen ./gen
+COPY internal ./internal
+COPY services/proxy ./services/proxy
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOFLAGS=-buildvcs=false \
+    go build -trimpath -ldflags="-s -w" -o /out/aegis-proxy ./services/proxy/cmd/aegis-proxy
+RUN mkdir -p /out/state /out/logs
+
+FROM gcr.io/distroless/static-debian12:nonroot
+ARG AEGIS_VERSION=1.7.1
+ENV AEGIS_VERSION=$AEGIS_VERSION
+ENV AEGIS_GEOIP_MMDB=/usr/share/aegis/geoip/country.mmdb
+COPY --from=build /out/aegis-proxy /aegis-proxy
+# State dir for the node identity, pre-owned by nonroot so the named volume
+# mounted over it is writable.
+COPY --from=build --chown=nonroot:nonroot /out/state /var/lib/aegis-proxy
+COPY --from=build --chown=nonroot:nonroot /out/logs /var/log/aegis
+COPY --from=geoip --chown=nonroot:nonroot /out/geoip /usr/share/aegis/geoip
+USER nonroot:nonroot
+EXPOSE 80 443 19000-19002
+ENTRYPOINT ["/aegis-proxy"]

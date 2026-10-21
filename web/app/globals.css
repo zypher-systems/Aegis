@@ -1,0 +1,344 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Aegis "Graphite" theme, the palette Argus uses: neutral greys with no
+   tint carry the UI, one blue accent carries actions and links, and status
+   colour (ok, warn, danger) is spent only on status marks. Dark is the
+   default; html.light is the alternate. Every colour is a token. Channels
+   (…-rgb) back the Tailwind colours so opacity modifiers work (bg-accent/10),
+   and the plain names further down are derived from them. Every text colour
+   clears 4.5:1 on the surfaces it sits on, and --input clears 3:1. */
+:root {
+  --bg-rgb: 12 13 15;
+  --bg-elev-rgb: 21 23 26;
+  --panel-rgb: 21 23 26;
+  --panel-2-rgb: 33 36 41;
+  --rail-rgb: 16 17 20;
+  --border-rgb: 37 40 45;
+  --border-strong-rgb: 51 55 61;
+  --border-hover-rgb: 72 77 85;
+  --input-rgb: 107 113 122;
+  --text-rgb: 236 236 239;
+  --text-dim-rgb: 156 161 169;
+  --text-faint-rgb: 139 144 153;
+  --accent-rgb: 108 157 255;
+  --accent-hover-rgb: 138 177 255;
+  /* Text on the accent and on status fills: these are light in the dark
+     theme, so the ink is dark. */
+  --ink-rgb: 7 20 48;
+  --ok-rgb: 79 208 143;
+  --warn-rgb: 243 181 86;
+  --danger-rgb: 255 125 115;
+
+  /* Categorical chart colours (block stages), in a fixed order that keeps
+     neighbours apart for colour-blind readers. Not status colours. */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+
+  --shadow-card: none;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239ca1a9' stroke-width='1.5'/%3E%3C/svg%3E");
+  color-scheme: dark;
+}
+
+html.light {
+  --bg-rgb: 245 246 248;
+  --bg-elev-rgb: 255 255 255;
+  --panel-rgb: 255 255 255;
+  --panel-2-rgb: 236 238 242;
+  --rail-rgb: 255 255 255;
+  --border-rgb: 225 228 232;
+  --border-strong-rgb: 207 211 217;
+  --border-hover-rgb: 174 179 187;
+  --input-rgb: 133 139 148;
+  --text-rgb: 17 19 23;
+  --text-dim-rgb: 92 98 108;
+  --text-faint-rgb: 100 106 116;
+  --accent-rgb: 31 91 216;
+  --accent-hover-rgb: 44 105 232;
+  --ink-rgb: 255 255 255;
+  --ok-rgb: 19 114 65;
+  --warn-rgb: 149 89 5;
+  --danger-rgb: 184 46 39;
+
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.05), 0 1px 3px rgb(16 24 40 / 0.04);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235c626c' stroke-width='1.5'/%3E%3C/svg%3E");
+  color-scheme: light;
+}
+
+:root {
+  --bg: rgb(var(--bg-rgb));
+  --bg-elev: rgb(var(--bg-elev-rgb));
+  --panel: rgb(var(--panel-rgb));
+  --panel-2: rgb(var(--panel-2-rgb));
+  --rail: rgb(var(--rail-rgb));
+  --border: rgb(var(--border-rgb));
+  --border-strong: rgb(var(--border-strong-rgb));
+  --border-hover: rgb(var(--border-hover-rgb));
+  --input: rgb(var(--input-rgb));
+  --text: rgb(var(--text-rgb));
+  --text-dim: rgb(var(--text-dim-rgb));
+  --text-faint: rgb(var(--text-faint-rgb));
+  --accent: rgb(var(--accent-rgb));
+  --accent-hover: rgb(var(--accent-hover-rgb));
+  --accent-glow: rgb(var(--accent-rgb) / 0.22);
+  --ink: rgb(var(--ink-rgb));
+  --ok: rgb(var(--ok-rgb));
+  --warn: rgb(var(--warn-rgb));
+  --danger: rgb(var(--danger-rgb));
+
+  --font-display: "Space Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-card: 16px;
+  --radius-control: 10px;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "tnum" 0;
+}
+
+.aegis-backdrop { background: var(--bg); }
+
+/* Surfaces */
+.panel,
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+.card-pad { padding: 22px 24px; }
+
+.section {
+  margin-top: 2.5rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border);
+}
+
+/* Type scale: display face for titles and big numbers, Manrope for text,
+   JetBrains Mono for data (IPs, rule ids, latencies). */
+.page-title {
+  font-family: var(--font-display);
+  font-size: 1.625rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.section-title {
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.display-num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+.kicker {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.mono { font-family: var(--font-mono); font-size: 0.925em; font-variant-ligatures: none; }
+code, kbd, samp { font-family: var(--font-mono); font-variant-ligatures: none; }
+
+/* Inputs: boxed controls. .field-line is the auth-page size. */
+.input,
+.field-line {
+  width: 100%;
+  height: 40px;
+  background: var(--bg);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-control);
+  padding: 0 12px;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.field-line { height: 44px; font-size: 15px; }
+.input:hover,
+.field-line:hover { border-color: var(--text-dim); }
+.input:focus,
+.field-line:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.input::placeholder,
+.field-line::placeholder { color: var(--text-faint); }
+.input:disabled { opacity: .5; cursor: not-allowed; }
+select.input {
+  appearance: none;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+  cursor: pointer;
+}
+select.input option { background: var(--panel); color: var(--text); }
+textarea.input { height: auto; padding: 10px 12px; line-height: 1.5; }
+
+/* Buttons. .btn-primary is the one mint call to action per view;
+   .btn-secondary is a bordered box; .btn-ghost and .btn-danger are quiet
+   text buttons for row actions. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color .15s, color .15s, border-color .15s, opacity .15s;
+}
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-sm { height: 32px; padding: 0 10px; font-size: 13px; border-radius: 8px; }
+.btn-primary,
+.btn-line { background: var(--accent); color: var(--ink); font-weight: 700; }
+.btn-primary:hover:not(:disabled),
+.btn-line:hover:not(:disabled) { background: var(--accent-hover); }
+.btn-secondary { background: var(--panel); color: var(--text); border-color: var(--border-strong); }
+.btn-secondary:hover:not(:disabled) { border-color: var(--border-hover); background: var(--panel-2); }
+.btn-ghost { color: var(--text-dim); height: 32px; padding: 0 10px; }
+.btn-ghost:hover:not(:disabled) { color: var(--text); background: var(--panel-2); }
+.btn-danger { color: var(--text-faint); height: 32px; padding: 0 10px; }
+.btn-danger:hover:not(:disabled) { color: var(--danger); background: rgb(var(--danger-rgb) / 0.1); }
+.btn-line {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 18px;
+  border: none;
+  border-radius: var(--radius-control);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-line:disabled { opacity: .45; cursor: not-allowed; }
+.btn-icon { width: 36px; padding: 0; }
+
+.dot { width: 6px; height: 6px; border-radius: 999px; display: inline-block; }
+.dot-ok { background: var(--ok); }
+.dot-down { background: var(--danger); }
+
+.table-row { border-bottom: 1px solid var(--border); transition: background-color .12s; }
+.table-row:last-child { border-bottom: none; }
+.table-row:hover { background: rgb(var(--panel-2-rgb) / 0.5); }
+
+/* Keyboard focus is always visible. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.input:focus-visible,
+.field-line:focus-visible { outline: none; }
+
+/* Glow used by live indicators and the posture hero. */
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ok);
+  box-shadow: 0 0 0 5px rgb(var(--ok-rgb) / 0.18);
+}
+.hero-glow {
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgb(var(--accent-rgb) / 0.10), rgb(var(--accent-rgb) / 0) 50%),
+    var(--panel);
+}
+
+@keyframes pulseGlow { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+.pulse { animation: pulseGlow 2s ease-in-out infinite; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.fade-in { animation: fadeIn .24s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-in, .pulse { animation: none; }
+}
+
+.auth-surface {
+  background: var(--bg);
+  min-height: 100%;
+}
+
+.edge-scene {
+  width: 100%;
+  max-width: 640px;
+  height: auto;
+  overflow: visible;
+}
+.edge-scene .wire { fill: none; stroke: var(--border-strong); stroke-width: 1.25; }
+.edge-scene .wire-dash { stroke-dasharray: 3 5; }
+.edge-scene .box { fill: none; stroke: var(--border-strong); stroke-width: 1.25; }
+.edge-scene .node { fill: var(--text-dim); }
+.edge-scene .label {
+  fill: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.edge-scene .pkt { fill: var(--accent); }
+.edge-scene .cfg-pulse {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.25;
+  opacity: 0;
+  animation: cfgPulse 4.5s ease-in-out infinite;
+}
+.edge-scene .stage { stroke: var(--accent); stroke-width: 1.25; opacity: .55; }
+
+@keyframes cfgPulse {
+  0%, 70%, 100% { opacity: 0; }
+  78% { opacity: 0.9; }
+  88% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edge-scene .pkt,
+  .edge-scene .cfg-pulse { display: none; }
+}
+
+/* Tables on a card: inset the first and last columns. */
+.data-table th:first-child,
+.data-table td:first-child { padding-left: 1.25rem; }
+.data-table th:last-child,
+.data-table td:last-child { padding-right: 1.25rem; }
+.data-table-bare th:first-child,
+.data-table-bare td:first-child { padding-left: 0; }
+.data-table-bare th:last-child,
+.data-table-bare td:last-child { padding-right: 0; }

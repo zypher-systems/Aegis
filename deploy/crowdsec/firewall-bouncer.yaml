@@ -1,0 +1,30 @@
+mode: nftables
+update_frequency: 10s
+daemonize: false
+log_mode: stdout
+log_level: info
+api_url: http://127.0.0.1:18081/
+api_key: ${API_KEY}
+insecure_skip_verify: false
+disable_ipv6: false
+deny_action: DROP
+deny_log: true
+supported_decisions_types:
+  - ban
+# Community lists + manual cscli bans. Local log scenarios stay on the L7
+# proxy stream (separate bouncer key).
+origins:
+  - CAPI
+  - cscli
+  - lists
+nftables:
+  ipv4:
+    enabled: true
+    set-only: false
+    table: crowdsec
+    chain: crowdsec-chain
+  ipv6:
+    enabled: true
+    set-only: false
+    table: crowdsec6
+    chain: crowdsec6-chain

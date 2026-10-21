@@ -1,0 +1,9 @@
+ALTER TABLE hosts
+    ADD COLUMN waf_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN waf_exclusions TEXT[] NOT NULL DEFAULT '{}',
+    ADD COLUMN rate_limit_rps INT NOT NULL DEFAULT 0,
+    ADD COLUMN rate_limit_burst INT NOT NULL DEFAULT 0,
+    ADD COLUMN geo_allow TEXT[] NOT NULL DEFAULT '{}',
+    ADD COLUMN geo_deny TEXT[] NOT NULL DEFAULT '{}',
+    ADD COLUMN crowdsec_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN oidc JSONB NOT NULL DEFAULT '{}'::jsonb;

@@ -1,0 +1,16 @@
+# syntax=docker/dockerfile:1
+# Box-level CrowdSec nftables bouncer. Not published to the registry;
+# compose builds it locally. Binary is the upstream GitHub release.
+FROM alpine:3.20
+ARG FW_VERSION=v0.0.36
+RUN apk add --no-cache ca-certificates nftables iptables ipset wget
+RUN wget -qO /tmp/fw.tgz \
+      "https://github.com/crowdsecurity/cs-firewall-bouncer/releases/download/${FW_VERSION}/crowdsec-firewall-bouncer-linux-amd64.tgz" \
+    && tar -xzf /tmp/fw.tgz -C /tmp \
+    && find /tmp -type f -name 'crowdsec-firewall-bouncer' -exec install -m0755 {} /usr/local/bin/crowdsec-firewall-bouncer \; \
+    && rm -rf /tmp/fw.tgz /tmp/crowdsec-firewall-bouncer* \
+    && test -x /usr/local/bin/crowdsec-firewall-bouncer
+COPY deploy/crowdsec/firewall-bouncer.yaml /tpl/firewall-bouncer.yaml
+COPY deploy/crowdsec/firewall-entrypoint.sh /entrypoint.sh
+RUN chmod 0755 /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]

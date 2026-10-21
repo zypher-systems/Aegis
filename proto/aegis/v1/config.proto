@@ -1,0 +1,248 @@
+syntax = "proto3";
+
+package aegis.v1;
+
+option go_package = "github.com/zypher-systems/aegis/gen/aegis/v1;aegisv1";
+
+// ConfigService streams the desired proxy configuration to enrolled nodes.
+// Nodes open a long-lived Watch stream over mTLS; the control plane pushes a
+// full snapshot on connect and then a new snapshot whenever config changes.
+service ConfigService {
+  rpc Watch(WatchRequest) returns (stream ConfigUpdate);
+  // Renew re-issues the calling node's client certificate from a new CSR
+  // over the existing mTLS session, so a node never has to re-enrol. The
+  // node keeps its key; only the certificate changes.
+  rpc Renew(RenewRequest) returns (RenewResponse);
+  // Report tells the control plane what is wrong on this node right now
+  // (a WAF profile that failed to compile, the CrowdSec stream down, no
+  // GeoIP database). The full current list is sent each time; anything no
+  // longer listed is resolved.
+  rpc Report(NodeReport) returns (ReportAck);
+}
+
+message NodeProblem {
+  // waf_compile | crowdsec_stream | geoip_missing
+  string kind = 1;
+  // What it applies to: a host's first domain, or empty for the node.
+  string resource = 2;
+  string detail = 3;
+}
+
+message NodeReport {
+  repeated NodeProblem problems = 1;
+}
+
+message ReportAck {}
+
+message RenewRequest {
+  bytes csr_pem = 1;
+  string agent_version = 2;
+}
+
+message RenewResponse {
+  bytes certificate_pem = 1;
+  // The current CA certificate, in case it was rotated.
+  bytes ca_certificate_pem = 2;
+  int64 expires_at_unix = 3;
+}
+
+message WatchRequest {
+  string node_id = 1;
+  // Last version the node applied; 0 on first connect. The server always
+  // sends a full snapshot when versions mismatch, so reconnects self-heal.
+  uint64 last_version = 2;
+  // Data-plane software version. Sent on every connect so an upgraded node
+  // stops reporting the version it enrolled with.
+  string agent_version = 3;
+}
+
+enum TLSMode {
+  TLS_MODE_UNSPECIFIED = 0;
+  TLS_MODE_AUTO = 1;   // ACME-managed certificate
+  TLS_MODE_CUSTOM = 2; // User-uploaded certificate (references cert_id)
+  TLS_MODE_NONE = 3;   // Plain HTTP only
+}
+
+enum HostKind {
+  HOST_KIND_UNSPECIFIED = 0;
+  HOST_KIND_PROXY = 1;
+  HOST_KIND_REDIRECT = 2;
+  HOST_KIND_DEAD = 3;
+  HOST_KIND_STREAM = 4;
+}
+
+enum ListenProtocol {
+  LISTEN_PROTOCOL_UNSPECIFIED = 0;
+  LISTEN_PROTOCOL_TCP = 1;
+  LISTEN_PROTOCOL_UDP = 2;
+}
+
+message Header {
+  string name = 1;
+  string value = 2;
+}
+
+message BasicAuthUser {
+  string username = 1;
+  string password_hash = 2; // argon2id PHC
+}
+
+// Compiled access list attached to a host in the snapshot. The proxy does
+// not resolve list IDs — the control plane expands them.
+message AccessList {
+  string satisfy = 1; // "any" | "all"
+  repeated BasicAuthUser users = 2;
+  repeated string allow_cidrs = 3;
+  repeated string deny_cidrs = 4;
+}
+
+message Host {
+  string id = 1;
+  repeated string domain_names = 2;
+  // Upstream target. scheme is "http" or "https". Unused for redirect/dead.
+  string upstream_scheme = 3;
+  string upstream_host = 4;
+  uint32 upstream_port = 5;
+  bool enabled = 6;
+  TLSMode tls_mode = 7;
+  // Set when tls_mode is CUSTOM; empty when AUTO (matched by SNI against
+  // the certificate list) or NONE.
+  string cert_id = 8;
+  bool force_https = 9;
+  bool hsts = 10;
+  bool websocket_support = 11;
+  HostKind kind = 12;
+  string redirect_url = 13;
+  uint32 redirect_code = 14;
+  repeated Header request_headers = 15;
+  repeated Header response_headers = 16;
+  AccessList access_list = 17;
+  ListenProtocol listen_protocol = 18;
+  uint32 listen_port = 19;
+  bool waf_enabled = 20;
+  // Reserved. Profiles no longer push individual catalog IDs.
+  repeated string waf_rule_ids = 21;
+  uint32 rate_limit_rps = 22;
+  uint32 rate_limit_burst = 23;
+  repeated string geo_allow = 24;
+  repeated string geo_deny = 25;
+  bool crowdsec_enabled = 26;
+  bool oidc_enabled = 27;
+  string oidc_issuer = 28;
+  string oidc_client_id = 29;
+  string oidc_client_secret = 30;
+  repeated string oidc_paths = 31;
+  string oidc_cookie_name = 32;
+  // detect | block. Empty means block.
+  string waf_mode = 33;
+  uint32 waf_paranoia = 34;
+  uint32 waf_inbound_threshold = 35;
+  repeated string waf_disabled_tags = 36;
+  repeated WAFExclusion waf_exclusions = 37;
+  repeated UpstreamTarget upstreams = 38;
+  // Host header sent upstream: "" = the client's Host (default, what
+  // nginx-proxy-manager does), "upstream" = the upstream's host:port,
+  // anything else = that literal value.
+  string upstream_host_header = 39;
+  // Timeouts and limits (1.7.2). 0 means the default.
+  // idle_timeout_seconds: cut a request when no bytes have moved in either
+  // direction for this long (nginx send_timeout/client_body_timeout style,
+  // not a cap on the whole response). Default 60.
+  uint32 idle_timeout_seconds = 40;
+  // upstream_response_timeout_seconds: how long to wait for the upstream's
+  // response headers (time to first byte). Default 60.
+  uint32 upstream_response_timeout_seconds = 41;
+  // max_body_bytes: requests with a larger body get 413. 0 = no limit.
+  uint64 max_body_bytes = 42;
+  // waf_body_limit_bytes: the WAF inspects this much of a request body;
+  // the rest is forwarded uninspected rather than rejected. Default 1 MiB.
+  uint32 waf_body_limit_bytes = 43;
+  // Protocol policy (CRS rules 911100, 920420, 920450). Empty lists mean the
+  // Aegis defaults, which are wider than CRS's.
+  repeated string waf_allowed_methods = 44;
+  repeated string waf_allowed_content_types = 45;
+  // waf_any_content_type turns the content-type check off entirely.
+  bool waf_any_content_type = 46;
+  // Request header names CRS refuses (rule 920450). Empty = the Aegis default,
+  // CRS's list without expect, content-encoding and content-range.
+  repeated string waf_restricted_headers = 47;
+  // HSTS options (used when hsts is true). max_age 0 = 31536000.
+  uint32 hsts_max_age = 48;
+  bool hsts_include_subdomains = 49;
+  bool hsts_preload = 50;
+  // Upstream selection: "" or "failover" (first healthy target in order) or
+  // "round_robin" (weighted rotation over healthy targets).
+  string lb_policy = 51;
+  // HTTP path the node probes on each upstream every few seconds; any answer
+  // below 500 is healthy. Empty = a TCP connect probe.
+  string health_path = 52;
+}
+
+// Per-rule false-positive tune. Empty path removes the rule everywhere.
+message WAFExclusion {
+  string rule_id = 1;
+  // Optional path prefix; empty = every path.
+  string path = 2;
+  // Optional input the rule stops inspecting, e.g. REQUEST_COOKIES:name or
+  // ARGS:/regex/. Empty = the whole rule is removed.
+  string target = 3;
+}
+
+// One origin for a proxy or stream host. With the default failover policy
+// the order is priority: first healthy target wins. Empty list falls back
+// to the legacy upstream_scheme / upstream_host / upstream_port fields.
+message UpstreamTarget {
+  string scheme = 1; // http | https; unused for stream
+  string host = 2;
+  uint32 port = 3;
+  // Origin TLS. Ignored when scheme is http. skip_verify is the homelab
+  // self-signed escape hatch; prefer tls_ca_pem when the CA is known.
+  bool tls_skip_verify = 4;
+  string tls_server_name = 5; // SNI override; needed when the URL host is an IP
+  string tls_ca_pem = 6;      // extra root/intermediate PEMs (added to the system pool)
+  uint32 weight = 7;          // round_robin share; 0 = 1
+}
+
+// Global security settings pushed with each snapshot.
+message SecurityConfig {
+  string crowdsec_lapi_url = 1;
+  string crowdsec_lapi_key = 2;
+  // Field 3 carried the license entitlement list. Fields 6–8 carried the
+  // zsl2 token, instance id, and dev-build switch. Removed when commercial
+  // licensing went away; never reuse them.
+  // Field 4 carried the API's master key to every node as an OIDC cookie
+  // key (never used). Removed in 1.7.2; never reuse it.
+  reserved 3, 4, 6, 7, 8;
+  reserved "entitlements", "visitor_cookie_key", "license_token", "license_instance_id", "license_dev";
+  // CIDRs of hops whose X-Forwarded-For we honour. Empty means the client
+  // IP is always RemoteAddr — the correct default for an internet-facing edge.
+  repeated string trusted_proxy_cidrs = 5;
+}
+
+// Certificate material delivered over mTLS. Key material never leaves the
+// control plane except over this authenticated, encrypted channel.
+message Certificate {
+  string id = 1;
+  bytes cert_pem = 2;
+  bytes key_pem = 3;
+  int64 expires_at_unix = 4;
+}
+
+// Active ACME HTTP-01 challenges the data plane must answer.
+message Challenge {
+  string token = 1;
+  string key_authorization = 2;
+}
+
+message ConfigUpdate {
+  // Monotonic version; nodes apply updates in order.
+  uint64 version = 1;
+  // Always true in the current protocol: every update is a full snapshot.
+  // Kept explicit so incremental diffs can be introduced without a breaking
+  // change.
+  bool snapshot = 2;
+  repeated Host hosts = 3;
+  repeated Certificate certificates = 4;
+  repeated Challenge challenges = 5;
+  SecurityConfig security = 6;
+}

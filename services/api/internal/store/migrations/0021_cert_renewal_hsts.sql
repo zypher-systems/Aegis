@@ -1,0 +1,5 @@
+-- 1.7.2: per-certificate auto-renew switch and per-host HSTS options.
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS auto_renew BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS hsts_max_age INTEGER NOT NULL DEFAULT 31536000;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS hsts_subdomains BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE hosts ADD COLUMN IF NOT EXISTS hsts_preload BOOLEAN NOT NULL DEFAULT false;

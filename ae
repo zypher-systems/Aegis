@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# ae — run a command inside the aegis toolchain container.
+# Usage:
+#   ./ae go build ./...
+#   ./ae buf generate
+#   ./ae sh -lc 'cd web && pnpm install'
+#   ./ae go test ./services/...
+set -e
+exec docker compose -f compose.tools.yaml run --rm tools "$@"
