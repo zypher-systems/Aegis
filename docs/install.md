@@ -1,6 +1,14 @@
 # Install Aegis
 
-Aegis builds from this repo. No images are published.
+Published images, `linux/amd64` and `linux/arm64`:
+
+- `ghcr.io/zypher-systems/aegis-api`
+- `ghcr.io/zypher-systems/aegis-proxy`
+- `ghcr.io/zypher-systems/aegis-web`
+
+`:latest` and the version in `VERSION` (`1.8.0`, and `1.8`) track `main`.
+`sha-<commit>` is that exact build. The firewall bouncer is not published;
+compose builds it on the box.
 
 `.env.example` sets `WEB_BIND=0.0.0.0`, so the dashboard is reachable from
 your LAN at `http://<this-box>:3300`; the API stays on loopback (the dashboard
@@ -11,7 +19,7 @@ admin UI belongs on the LAN or a VPN. The proxy owns public `80`/`443`.
 
 Docker and Docker Compose. Nothing else on the host.
 
-## From this repo (dogfood / first box)
+## From the published images
 
 ```sh
 cp .env.example .env
@@ -22,8 +30,12 @@ cp .env.example .env
 #   openssl rand -hex 32 each. L7 and firewall keys must differ.
 #   Compose fails closed if Postgres or CrowdSec keys are unset.
 
-docker compose up -d --build
+docker compose pull api proxy web
+docker compose up -d
 ```
+
+Pin a version with `AEGIS_VERSION=1.8.0` in `.env`. To compile this checkout
+instead, `AEGIS_PULL_POLICY=build docker compose up -d --build`.
 
 Country lookup is already in the api and proxy images (DB-IP Country Lite).
 Do not download a MaxMind database.
@@ -37,8 +49,8 @@ If host `80`/`443` are taken, set `PROXY_HTTP_PORT` / `PROXY_HTTPS_PORT` in
 
 ## Upgrading
 
-`git pull`, then rebuild; see [upgrade](upgrade.md). Keep `AEGIS_SECRET_KEY`
-identical to the box that created the Postgres volume.
+`docker compose pull api proxy web`, then recreate; see [upgrade](upgrade.md).
+Keep `AEGIS_SECRET_KEY` identical to the box that created the Postgres volume.
 
 ## CrowdSec
 
