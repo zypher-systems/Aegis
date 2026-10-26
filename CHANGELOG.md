@@ -52,6 +52,18 @@ The Graphite theme with a light alternate, and an Overview that says more.
   - The period before is counted up to the same point in its last bucket as
     the current one, so steady traffic does not read as a drop.
 
+### Security
+
+- **Go 1.27.3.** The api and proxy build on Go 1.27 (was 1.25, which has no
+  fix for CVE-2026-111943, -78667, -78669 or -97031), with
+  `golang.org/x/net` 0.60.0.
+- **Coraza 3.8.1** fixes CVE-2026-107826 and CVE-2026-41510 in the WAF.
+- **Next.js 15.5.28** fixes an unauthenticated remote code execution in the
+  image optimizer (GHSA-2464-fhr4-w9xw) and CVE-2026-94482, and the CVEs
+  that were ignored for 15.5.25. `sharp` 0.35.5 and `source-map-js` 1.2.2.
+- **No npm in the web image.** The dashboard runs `node server.js`; the
+  base image's npm is removed.
+
 ## [Unreleased] — 1.7.2
 
 Production-readiness fixes from the pre-cutover audit.

@@ -117,6 +117,7 @@ jobs:
           trivyignores: .trivyignore
           timeout: 10m
       - name: Scan proxy
+        if: always() && steps.build.outcome == 'success'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.build.outputs.prefix }}/aegis-proxy:${{ steps.build.outputs.version }}
@@ -126,6 +127,7 @@ jobs:
           trivyignores: .trivyignore
           timeout: 10m
       - name: Scan web
+        if: always() && steps.build.outcome == 'success'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.build.outputs.prefix }}/aegis-web:${{ steps.build.outputs.version }}
@@ -155,6 +157,7 @@ jobs:
           EOF
 
       - name: Start the stack
+        id: stack
         run: docker compose -f compose.yaml -f compose.ci.yaml up -d --wait --wait-timeout 420
 
       - name: Happy path
@@ -172,11 +175,11 @@ jobs:
             bash -lc 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y -qq curl openssl ca-certificates python3 >/dev/null && bash /happy-path.sh'
 
       - name: Logs
-        if: failure()
+        if: failure() && steps.stack.outcome != 'skipped'
         run: docker compose -f compose.yaml -f compose.ci.yaml logs
 
       - name: Tear down
-        if: always()
+        if: always() && steps.stack.outcome != 'skipped'
         run: docker compose -f compose.yaml -f compose.ci.yaml down -v
 
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
