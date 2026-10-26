@@ -16,6 +16,10 @@ services:
     depends_on: {}
   api:
     ports: !reset []
+    # up --wait fails on any exited one-shot that nothing waits for.
+    depends_on:
+      crowdsec-init:
+        condition: service_completed_successfully
     environment:
       # Playwright talks to the dashboard as http://web:3000 on the compose
       # network. Origin must match or login is CSRF 403.
