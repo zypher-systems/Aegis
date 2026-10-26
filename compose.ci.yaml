@@ -26,12 +26,3 @@ services:
     ports: !reset []
   crowdsec:
     ports: !reset []
-    volumes: !override
-      - crowdsec-data:/var/lib/crowdsec/data
-      - crowdsec-config:/etc/crowdsec
-      - aegis-logs:/var/log/aegis:ro
-  crowdsec-init:
-    volumes: !override
-      - crowdsec-data:/var/lib/crowdsec/data
-      - crowdsec-config:/etc/crowdsec
-    entrypoint: ["/bin/sh", "/etc/crowdsec/init-allowlist.sh"]
