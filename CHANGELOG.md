@@ -60,7 +60,9 @@ The Graphite theme with a light alternate, and an Overview that says more.
 - **Coraza 3.8.1** fixes CVE-2026-107826 and CVE-2026-41510 in the WAF.
 - **Next.js 15.5.28** fixes an unauthenticated remote code execution in the
   image optimizer (GHSA-2464-fhr4-w9xw) and CVE-2026-94482, and the CVEs
-  that were ignored for 15.5.25. `sharp` 0.35.5 and `source-map-js` 1.2.2.
+  that were ignored for 15.5.25. Next's pinned `postcss` 8.4.31 is
+  overridden to 8.5 (CVE-2026-45623, CVE-2026-73646). `sharp` 0.35.5 and
+  `source-map-js` 1.2.2.
 - **No npm in the web image.** The dashboard runs `node server.js`; the
   base image's npm is removed.
 
