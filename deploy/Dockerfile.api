@@ -11,7 +11,7 @@ RUN /bin/sh /fetch-dbip-country.sh /out/geoip/country.mmdb "$GEOIP_MONTH" \
     && chmod 0755 /out/geoip && chmod 0644 /out/geoip/country.mmdb
 
 # Build the control-plane binary.
-FROM golang:1.25-bookworm AS build
+FROM golang:1.27-bookworm AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
@@ -24,7 +24,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -trimpath -ldflags="-s -w" -o /out/aegis-api ./services/api/cmd/aegis-api
 
 FROM gcr.io/distroless/static-debian12:nonroot
-ARG AEGIS_VERSION=1.7.1
+ARG AEGIS_VERSION=1.8.0
 ENV AEGIS_VERSION=$AEGIS_VERSION
 ENV AEGIS_GEOIP_MMDB=/usr/share/aegis/geoip/country.mmdb
 COPY --from=build /out/aegis-api /aegis-api

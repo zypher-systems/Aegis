@@ -1,18 +1,3 @@
 # Known base-image findings that are unfixed upstream or accepted noise.
 # Trivy still fails the job on fixable HIGH/CRITICAL (--ignore-unfixed).
 # Add a CVE here only with a one-line reason.
-
-# Next 15.5.25 standalone transitives. No patched next release yet; these are
-# not Aegis app code.
-CVE-2026-13149
-CVE-2026-14257
-CVE-2026-33671
-CVE-2026-45623
-CVE-2026-48815
-CVE-2026-59873
-CVE-2026-59874
-CVE-2026-69152
-CVE-2026-69192
-CVE-2026-73566
-CVE-2026-73646
-CVE-2026-9496

@@ -8,6 +8,10 @@ The Graphite theme with a light alternate, and an Overview that says more.
 
 ### Changed
 
+- **Published images.** `ghcr.io/zypher-systems/aegis-api`, `aegis-proxy`, and
+  `aegis-web` for linux/amd64 and linux/arm64. `:latest` and the `VERSION`
+  tags track `main`; `sha-<commit>` is that build. The firewall bouncer is
+  still built on the box.
 - **The Graphite palette, and a light theme.** The dashboard takes the
   palette Argus uses: neutral greys with no tint, one blue accent
   (`#6c9dff` dark, `#1f5bd8` light) for actions, links and the served-traffic
@@ -47,6 +51,20 @@ The Graphite theme with a light alternate, and an Overview that says more.
     period before rather than one against missing buckets.
   - The period before is counted up to the same point in its last bucket as
     the current one, so steady traffic does not read as a drop.
+
+### Security
+
+- **Go 1.27.3.** The api and proxy build on Go 1.27 (was 1.25, which has no
+  fix for CVE-2026-111943, -78667, -78669 or -97031), with
+  `golang.org/x/net` 0.60.0.
+- **Coraza 3.8.1** fixes CVE-2026-107826 and CVE-2026-41510 in the WAF.
+- **Next.js 15.5.28** fixes an unauthenticated remote code execution in the
+  image optimizer (GHSA-2464-fhr4-w9xw) and CVE-2026-94482, and the CVEs
+  that were ignored for 15.5.25. Next's pinned `postcss` 8.4.31 is
+  overridden to 8.5 (CVE-2026-45623, CVE-2026-73646). `sharp` 0.35.5 and
+  `source-map-js` 1.2.2.
+- **No npm in the web image.** The dashboard runs `node server.js`; the
+  base image's npm is removed.
 
 ## [Unreleased] — 1.7.2
 

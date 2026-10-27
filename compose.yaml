@@ -1,8 +1,8 @@
 name: aegis
 
-# Production-style multi-container stack. The dashboard (aegis-web) is built
-# separately; during Milestone 1 bring-up you can run the API + proxy + data
-# stores alone and drive the API with curl.
+# Production stack. api, proxy, and web are the published images
+# (ghcr.io/zypher-systems/aegis-*). Set AEGIS_PULL_POLICY=build to compile
+# them from this checkout. The firewall bouncer is always built here.
 #
 # Required in .env (compose fails closed if any are empty):
 #   AEGIS_SECRET_KEY, AEGIS_ENROLL_TOKEN, POSTGRES_PASSWORD,
@@ -71,13 +71,14 @@ services:
     <<: [*restart, *logging]
     # Drains REST, node streams and telemetry before exiting (20 s budget).
     stop_grace_period: 30s
+    image: ghcr.io/zypher-systems/aegis-api:${AEGIS_VERSION:-1.8.0}
+    pull_policy: ${AEGIS_PULL_POLICY:-always}
     build:
       context: .
       dockerfile: deploy/Dockerfile.api
       args:
         GEOIP_MONTH: ${GEOIP_MONTH:-}
         AEGIS_VERSION: ${AEGIS_VERSION:-1.8.0}
-    image: aegis-api:dev
     environment:
       AEGIS_HTTP_ADDR: ":8080"
       AEGIS_GRPC_ADDR: ":9443"     # mTLS node plane (config/telemetry)
@@ -137,13 +138,14 @@ services:
     # Stops accepting, finishes in-flight requests, then gives WebSockets and
     # streams the rest of the budget before closing them (25 s).
     stop_grace_period: 30s
+    image: ghcr.io/zypher-systems/aegis-proxy:${AEGIS_VERSION:-1.8.0}
+    pull_policy: ${AEGIS_PULL_POLICY:-always}
     build:
       context: .
       dockerfile: deploy/Dockerfile.proxy
       args:
         GEOIP_MONTH: ${GEOIP_MONTH:-}
         AEGIS_VERSION: ${AEGIS_VERSION:-1.8.0}
-    image: aegis-proxy:dev
     environment:
       AEGIS_CONTROL_PLANE: api:9444
       AEGIS_NODE_PLANE: api:9443
@@ -188,13 +190,14 @@ services:
 
   web:
     <<: [*restart, *logging]
+    image: ghcr.io/zypher-systems/aegis-web:${AEGIS_VERSION:-1.8.0}
+    pull_policy: ${AEGIS_PULL_POLICY:-always}
     build:
       context: .
       dockerfile: deploy/Dockerfile.web
       args:
         AEGIS_API_INTERNAL: http://api:8080
         AEGIS_VERSION: ${AEGIS_VERSION:-1.8.0}
-    image: aegis-web:dev
     environment:
       AEGIS_API_INTERNAL: http://api:8080
       AEGIS_VERSION: ${AEGIS_VERSION:-1.8.0}
@@ -319,6 +322,7 @@ services:
       context: .
       dockerfile: deploy/Dockerfile.firewall-bouncer
     image: aegis-crowdsec-firewall:dev
+    pull_policy: build
     network_mode: host
     restart: unless-stopped
     cap_add:

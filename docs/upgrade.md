@@ -1,8 +1,7 @@
 # Upgrade
 
-Migrations run on API boot inside a transaction. Pull the new source, rebuild,
-recreate the API container so it applies pending SQL, then roll the proxy and
-web.
+Migrations run on API boot inside a transaction. Pull the new api image and
+recreate it so it applies pending SQL, then roll the proxy and web.
 
 ## Unreleased
 
@@ -14,6 +13,9 @@ web.
   when the snapshot has no license token.
 - `AEGIS_LICENSE_KEY`, `AEGIS_LICENSE_SERVER`, `AEGIS_LICENSE_DEV`, and
   `AEGIS_GO_TAGS` are unused. Remove them from `.env`.
+- **Images are published** to `ghcr.io/zypher-systems/aegis-api`,
+  `aegis-proxy`, and `aegis-web` (`linux/amd64` and `linux/arm64`). See
+  [Install a published image](#install-a-published-image).
 
 ## 1.8.0
 
@@ -142,19 +144,27 @@ web.
 - Docs: [install](install.md), [configuration](configuration.md),
   [backup](backup.md), [NPM migration](migrate-npm.md).
 
-## Build the new version
-
-No images are published; each box builds from source:
+## Install a published image
 
 ```sh
-git pull
-docker compose build
+# Pin with AEGIS_VERSION=1.8.0 in .env, or leave it unset for that default.
+docker compose pull api proxy web
 docker compose up -d api        # applies pending migrations
 docker compose up -d proxy web
 ```
 
-Keep the same `AEGIS_SECRET_KEY`. Changing it makes encrypted settings and
-certs unreadable.
+`:latest` and the `VERSION` tag track `main`. `sha-<commit>` stays on that
+build. Keep the same `AEGIS_SECRET_KEY`. Changing it makes encrypted settings
+and certs unreadable.
+
+To compile this checkout instead:
+
+```sh
+git pull
+AEGIS_PULL_POLICY=build docker compose build
+AEGIS_PULL_POLICY=build docker compose up -d api
+AEGIS_PULL_POLICY=build docker compose up -d proxy web
+```
 
 ## What 1.0 added
 

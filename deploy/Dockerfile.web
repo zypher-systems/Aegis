@@ -17,9 +17,13 @@ RUN pnpm build
 
 FROM node:22-alpine AS run
 WORKDIR /app
-ARG AEGIS_VERSION=1.7.1
+ARG AEGIS_VERSION=1.8.0
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0 AEGIS_VERSION=$AEGIS_VERSION
+# The runtime only runs node server.js; drop the base image's bundled npm so
+# its dependencies don't ship (and get scanned) with the dashboard.
 RUN apk upgrade --no-cache \
+  && apk add --no-cache wget \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
   && addgroup -S nodejs && adduser -S nextjs -G nodejs
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static

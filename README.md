@@ -30,8 +30,14 @@ cp .env.example .env
 #     Without CROWDSEC_MACHINE_PASSWORD, Analytics bans are a no-op.
 # Leave AEGIS_SELFSIGNED=true for local/e2e (no public DNS required).
 
-docker compose up -d --build
+docker compose pull api proxy web
+docker compose up -d
 ```
+
+That pulls `ghcr.io/zypher-systems/aegis-api`, `aegis-proxy`, and `aegis-web`
+(`1.8.0` by default; set `AEGIS_VERSION` to pin). To compile this checkout,
+`AEGIS_PULL_POLICY=build docker compose up -d --build`. The firewall bouncer
+is always built locally.
 
 | Service | Host address | Notes |
 |---|---|---|
@@ -130,9 +136,13 @@ DIRECT=http://127.0.0.1:8081 PROXY=http://127.0.0.1:80 HOST=k6.local k6 run test
 
 ## CI
 
-No CI runs right now. Before merging, run `./ae go vet ./...`, `./ae go test ./...`,
-`./ae buf lint`, `./ae sh tests/coverage-floor.sh`, the [e2e](#e2e) suite, and the k6
-smoke above.
+Pushes and pull requests run `go vet`, `go test`, `buf lint`, the coverage
+floor, dashboard typecheck, a Trivy scan of the three images, and the
+happy-path against the compose stack on `linux/amd64` and `linux/arm64`.
+
+A push to `main` publishes those images. `:latest`, `1.8.0`, and `1.8` track
+`main` for as long as `VERSION` says `1.8.0`. `sha-<commit>` is the exact
+build.
 
 ## Production notes (before you point 80/443 at a box)
 
@@ -158,5 +168,3 @@ tests/e2e/          happy-path.sh
 tests/load/         k6 smoke + gate
 docs/               install, configuration, backup, origin auth, NPM migration, ASVS
 ```
-
-See [plan.md](plan.md) and [roadmap.md](roadmap.md).
