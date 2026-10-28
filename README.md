@@ -36,8 +36,8 @@ docker compose up -d
 
 That pulls `ghcr.io/zypher-systems/aegis-api`, `aegis-proxy`, and `aegis-web`
 (`1.8.0` by default; set `AEGIS_VERSION` to pin). To compile this checkout,
-`AEGIS_PULL_POLICY=build docker compose up -d --build`. The firewall bouncer
-is always built locally.
+`docker compose -f compose.yaml -f compose.build.yaml up -d --build`. The
+firewall bouncer is always built locally.
 
 | Service | Host address | Notes |
 |---|---|---|

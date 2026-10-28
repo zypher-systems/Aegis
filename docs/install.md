@@ -35,7 +35,7 @@ docker compose up -d
 ```
 
 Pin a version with `AEGIS_VERSION=1.8.0` in `.env`. To compile this checkout
-instead, `AEGIS_PULL_POLICY=build docker compose up -d --build`.
+instead, `docker compose -f compose.yaml -f compose.build.yaml up -d --build`.
 
 Country lookup is already in the api and proxy images (DB-IP Country Lite).
 Do not download a MaxMind database.

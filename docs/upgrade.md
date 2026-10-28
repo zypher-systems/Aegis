@@ -157,13 +157,28 @@ docker compose up -d proxy web
 build. Keep the same `AEGIS_SECRET_KEY`. Changing it makes encrypted settings
 and certs unreadable.
 
+A box that was building images from the licensed checkout keeps its database
+when this file replaces the old one in the same Docker project. The project
+name is `aegis`, so Postgres stays on the volume `aegis_pgdata`, and the
+proxy keeps `aegis_proxystate`. Leave `AEGIS_SECRET_KEY` and
+`POSTGRES_PASSWORD` as they are. Remove `AEGIS_LICENSE_KEY`,
+`AEGIS_LICENSE_SERVER`, `AEGIS_LICENSE_DEV`, and `AEGIS_GO_TAGS`. Then:
+
+```sh
+docker compose pull api proxy web
+docker compose up -d
+```
+
+That recreates the containers and leaves the named volumes in place. Do not
+pass `--volumes` to `down`.
+
 To compile this checkout instead:
 
 ```sh
 git pull
-AEGIS_PULL_POLICY=build docker compose build
-AEGIS_PULL_POLICY=build docker compose up -d api
-AEGIS_PULL_POLICY=build docker compose up -d proxy web
+docker compose -f compose.yaml -f compose.build.yaml build api proxy web
+docker compose -f compose.yaml -f compose.build.yaml up -d api
+docker compose -f compose.yaml -f compose.build.yaml up -d proxy web
 ```
 
 ## What 1.0 added
