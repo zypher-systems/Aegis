@@ -1,0 +1,27 @@
+# Compile api, proxy, and web from this checkout instead of pulling them.
+#   docker compose -f compose.yaml -f compose.build.yaml up -d --build
+services:
+  api:
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.api
+      args:
+        GEOIP_MONTH: ${GEOIP_MONTH:-}
+        AEGIS_VERSION: ${AEGIS_VERSION:-1.8.0}
+  proxy:
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.proxy
+      args:
+        GEOIP_MONTH: ${GEOIP_MONTH:-}
+        AEGIS_VERSION: ${AEGIS_VERSION:-1.8.0}
+  web:
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.web
+      args:
+        AEGIS_API_INTERNAL: http://api:8080
+        AEGIS_VERSION: ${AEGIS_VERSION:-1.8.0}
