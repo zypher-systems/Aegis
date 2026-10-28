@@ -9,9 +9,8 @@ The Graphite theme with a light alternate, and an Overview that says more.
 ### Changed
 
 - **Published images.** `ghcr.io/zypher-systems/aegis-api`, `aegis-proxy`, and
-  `aegis-web` for linux/amd64 and linux/arm64. `:latest` and the `VERSION`
-  tags track `main`; `sha-<commit>` is that build. The firewall bouncer is
-  still built on the box.
+  `aegis-web` for linux/amd64 and linux/arm64. Compose pulls `:latest`.
+  The firewall bouncer is still built on the box.
 - **The Graphite palette, and a light theme.** The dashboard takes the
   palette Argus uses: neutral greys with no tint, one blue accent
   (`#6c9dff` dark, `#1f5bd8` light) for actions, links and the served-traffic

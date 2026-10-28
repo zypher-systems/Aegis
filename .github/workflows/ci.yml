@@ -93,6 +93,7 @@ jobs:
               --load \
               --file "$file" \
               --tag "${prefix}/aegis-${name}:${version}" \
+              --tag "${prefix}/aegis-${name}:latest" \
               --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
               --label "org.opencontainers.image.licenses=MIT" \
               --label "org.opencontainers.image.version=${version}" \
@@ -151,7 +152,6 @@ jobs:
           CROWDSEC_FIREWALL_KEY=$(openssl rand -hex 32)
           CROWDSEC_MACHINE_PASSWORD=$(openssl rand -hex 32)
           AEGIS_SELFSIGNED=true
-          AEGIS_VERSION=${VERSION}
           AEGIS_PULL_POLICY=never
           GEOIP_MONTH=$(date -u +%Y-%m)
           EOF

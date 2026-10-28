@@ -1,6 +1,6 @@
 name: aegis
 
-# Production stack. api, proxy, and web are pulled from GHCR.
+# Production stack. api, proxy, and web are pulled as :latest from GHCR.
 # Compile them from this checkout with compose.build.yaml.
 # The firewall bouncer is not published; this file builds it.
 #
@@ -71,7 +71,7 @@ services:
     <<: [*restart, *logging]
     # Drains REST, node streams and telemetry before exiting (20 s budget).
     stop_grace_period: 30s
-    image: ghcr.io/zypher-systems/aegis-api:${AEGIS_VERSION:-1.8.0}
+    image: ghcr.io/zypher-systems/aegis-api:latest
     pull_policy: ${AEGIS_PULL_POLICY:-always}
     environment:
       AEGIS_HTTP_ADDR: ":8080"
@@ -87,7 +87,6 @@ services:
       AEGIS_ACME_SKIP_TLS: ${AEGIS_ACME_SKIP_TLS:-false}
       AEGIS_CF_API_TOKEN: ${AEGIS_CF_API_TOKEN:-}
       AEGIS_PUBLIC_ORIGIN: ${AEGIS_PUBLIC_ORIGIN:-http://127.0.0.1:3300}
-      AEGIS_VERSION: ${AEGIS_VERSION:-1.8.0}
       AEGIS_GEOIP_MMDB: ${AEGIS_GEOIP_MMDB:-/usr/share/aegis/geoip/country.mmdb}
       AEGIS_TRUSTED_PROXY_CIDRS: ${AEGIS_TRUSTED_PROXY_CIDRS:-}
       AEGIS_METRICS_TOKEN: ${AEGIS_METRICS_TOKEN:-}
@@ -132,7 +131,7 @@ services:
     # Stops accepting, finishes in-flight requests, then gives WebSockets and
     # streams the rest of the budget before closing them (25 s).
     stop_grace_period: 30s
-    image: ghcr.io/zypher-systems/aegis-proxy:${AEGIS_VERSION:-1.8.0}
+    image: ghcr.io/zypher-systems/aegis-proxy:latest
     pull_policy: ${AEGIS_PULL_POLICY:-always}
     environment:
       AEGIS_CONTROL_PLANE: api:9444
@@ -143,7 +142,6 @@ services:
       AEGIS_HTTPS_ADDR: ":443"
       AEGIS_STATE_DIR: /var/lib/aegis-proxy
       AEGIS_REDIS_ADDR: redis:6379
-      AEGIS_VERSION: ${AEGIS_VERSION:-1.8.0}
       AEGIS_GEOIP_MMDB: ${AEGIS_GEOIP_MMDB:-/usr/share/aegis/geoip/country.mmdb}
       AEGIS_TRUSTED_PROXY_CIDRS: ${AEGIS_TRUSTED_PROXY_CIDRS:-}
       AEGIS_ERROR_PAGE: ${AEGIS_ERROR_PAGE:-}
@@ -178,11 +176,10 @@ services:
 
   web:
     <<: [*restart, *logging]
-    image: ghcr.io/zypher-systems/aegis-web:${AEGIS_VERSION:-1.8.0}
+    image: ghcr.io/zypher-systems/aegis-web:latest
     pull_policy: ${AEGIS_PULL_POLICY:-always}
     environment:
       AEGIS_API_INTERNAL: http://api:8080
-      AEGIS_VERSION: ${AEGIS_VERSION:-1.8.0}
       PORT: "3000"
     depends_on:
       api:
@@ -303,7 +300,7 @@ services:
     build:
       context: .
       dockerfile: deploy/Dockerfile.firewall-bouncer
-    image: aegis-crowdsec-firewall:dev
+    image: aegis-crowdsec-firewall:local
     pull_policy: build
     network_mode: host
     restart: unless-stopped
