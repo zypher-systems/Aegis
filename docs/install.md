@@ -6,9 +6,9 @@ Published images, `linux/amd64` and `linux/arm64`:
 - `ghcr.io/zypher-systems/aegis-proxy`
 - `ghcr.io/zypher-systems/aegis-web`
 
-`:latest` and the version in `VERSION` (`1.8.0`, and `1.8`) track `main`.
-`sha-<commit>` is that exact build. The firewall bouncer is not published;
-compose builds it on the box.
+Compose pulls `:latest` for api, proxy, and web. A push to `main` moves
+that tag. To stay on one build, change those three image lines. The firewall
+bouncer is not published; compose builds it on the box.
 
 `.env.example` sets `WEB_BIND=0.0.0.0`, so the dashboard is reachable from
 your LAN at `http://<this-box>:3300`; the API stays on loopback (the dashboard
@@ -34,7 +34,7 @@ docker compose pull api proxy web
 docker compose up -d
 ```
 
-Pin a version with `AEGIS_VERSION=1.8.0` in `.env`. To compile this checkout
+`docker compose pull` then `up -d` follows `:latest`. To compile this checkout
 instead, `docker compose -f compose.yaml -f compose.build.yaml up -d --build`.
 
 Country lookup is already in the api and proxy images (DB-IP Country Lite).

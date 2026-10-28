@@ -34,8 +34,8 @@ docker compose pull api proxy web
 docker compose up -d
 ```
 
-That pulls `ghcr.io/zypher-systems/aegis-api`, `aegis-proxy`, and `aegis-web`
-(`1.8.0` by default; set `AEGIS_VERSION` to pin). To compile this checkout,
+That pulls `ghcr.io/zypher-systems/aegis-api:latest`, `aegis-proxy:latest`,
+and `aegis-web:latest`. To compile this checkout,
 `docker compose -f compose.yaml -f compose.build.yaml up -d --build`. The
 firewall bouncer is always built locally.
 
@@ -140,9 +140,8 @@ Pushes and pull requests run `go vet`, `go test`, `buf lint`, the coverage
 floor, dashboard typecheck, a Trivy scan of the three images, and the
 happy-path against the compose stack on `linux/amd64` and `linux/arm64`.
 
-A push to `main` publishes those images. `:latest`, `1.8.0`, and `1.8` track
-`main` for as long as `VERSION` says `1.8.0`. `sha-<commit>` is the exact
-build.
+A push to `main` publishes those images and moves `:latest`. `sha-<commit>`
+is that exact build.
 
 ## Production notes (before you point 80/443 at a box)
 

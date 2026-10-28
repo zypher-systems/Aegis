@@ -147,15 +147,13 @@ recreate it so it applies pending SQL, then roll the proxy and web.
 ## Install a published image
 
 ```sh
-# Pin with AEGIS_VERSION=1.8.0 in .env, or leave it unset for that default.
 docker compose pull api proxy web
 docker compose up -d api        # applies pending migrations
 docker compose up -d proxy web
 ```
 
-`:latest` and the `VERSION` tag track `main`. `sha-<commit>` stays on that
-build. Keep the same `AEGIS_SECRET_KEY`. Changing it makes encrypted settings
-and certs unreadable.
+Compose tracks `:latest`. Keep the same `AEGIS_SECRET_KEY`. Changing it makes
+encrypted settings and certs unreadable.
 
 A box that was building images from the licensed checkout keeps its database
 when this file replaces the old one in the same Docker project. The project
