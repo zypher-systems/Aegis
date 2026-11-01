@@ -11,7 +11,7 @@ Docker and Docker Compose are the only requirements. You do not need Git or the 
 ```sh
 mkdir aegis && cd aegis
 curl -fsSL https://github.com/zypher-systems/aegis/archive/refs/heads/main.tar.gz \
-  | tar -xz --strip-components=1 --wildcards '*/compose.yaml' '*/.env.example' '*/deploy/*'
+  | tar -xz --strip-components=1 Aegis-main/compose.yaml Aegis-main/.env.example Aegis-main/deploy
 cp .env.example .env
 ```
 
@@ -77,7 +77,7 @@ These screenshots use demo data.
 
 ```sh
 curl -fsSL https://github.com/zypher-systems/aegis/archive/refs/heads/main.tar.gz \
-  | tar -xz --strip-components=1 --wildcards '*/compose.yaml' '*/.env.example' '*/deploy/*'
+  | tar -xz --strip-components=1 Aegis-main/compose.yaml Aegis-main/.env.example Aegis-main/deploy
 docker compose pull api proxy web
 docker compose up -d
 ```

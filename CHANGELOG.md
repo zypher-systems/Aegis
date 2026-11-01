@@ -28,7 +28,7 @@ that looked complete and were not.
   not reach; importing the file again continues and reuses what was issued. If
   the client leaves, the import ends after the host it is working on, so no
   more orders are placed. A failed certificate lookup no longer places an
-  order either.
+  order either, and a retry joins an order already running for the same names.
 - **Import no longer drops protection given only by id.** An entry with an
   `access_list_id` or `waf_profile_id` but no name, such as a copy of the API's
   host JSON, was imported without it. It is now reported and left out.
@@ -48,11 +48,6 @@ that looked complete and were not.
 - **A refused user edit changes nothing.** A password under 10 characters
   returned an error after the new email and name were already saved. The
   password is checked first, and all of it is saved in one write.
-
-### Security
-
-- **go-jose 4.1.6** fixes CVE-2026-116587, a denial of service through crafted
-  RSA parameters in a JWK.
 
 ## [Unreleased] — 1.8.0
 
@@ -108,6 +103,8 @@ The Graphite theme with a light alternate, and an Overview that says more.
   fix for CVE-2026-111943, -78667, -78669 or -97031), with
   `golang.org/x/net` 0.60.0.
 - **Coraza 3.8.1** fixes CVE-2026-107826 and CVE-2026-41510 in the WAF.
+- **go-jose 4.1.6** fixes CVE-2026-116587, a denial of service through crafted
+  RSA parameters in a JWK.
 - **Next.js 15.5.28** fixes an unauthenticated remote code execution in the
   image optimizer (GHSA-2464-fhr4-w9xw) and CVE-2026-94482, and the CVEs
   that were ignored for 15.5.25. Next's pinned `postcss` 8.4.31 is
