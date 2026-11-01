@@ -1,0 +1,32 @@
+# CI overlay: do not install nftables on the docker-build runner.
+# Adding a profile disables default start (merged service is profile-gated).
+# Drop host port publishes — e2e talks on the compose network, and main+dev
+# jobs on the same runner cannot share 18081 / 19000-19002.
+services:
+  crowdsec-firewall:
+    profiles: ["ci-disabled"]
+    image: alpine:3.20
+    network_mode: bridge
+    cap_drop:
+      - ALL
+    environment: {}
+    volumes: []
+    entrypoint: ["true"]
+    restart: "no"
+    depends_on: {}
+  api:
+    ports: !reset []
+    # up --wait fails on any exited one-shot that nothing waits for.
+    depends_on:
+      crowdsec-init:
+        condition: service_completed_successfully
+    environment:
+      # Playwright talks to the dashboard as http://web:3000 on the compose
+      # network. Origin must match or login is CSRF 403.
+      AEGIS_PUBLIC_ORIGIN: http://web:3000
+  web:
+    ports: !reset []
+  proxy:
+    ports: !reset []
+  crowdsec:
+    ports: !reset []

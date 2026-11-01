@@ -1,0 +1,27 @@
+# Development tooling: run any command inside the toolchain container with the
+# repo bind-mounted. Examples:
+#   docker compose -f compose.tools.yaml run --rm tools buf generate
+#   docker compose -f compose.tools.yaml run --rm tools go test ./...
+#   docker compose -f compose.tools.yaml run --rm tools sh -lc 'cd web && pnpm install'
+# Its own project name: sharing "aegis" with the running stack let a tools
+# run recreate the stack's default network and strand its containers.
+name: aegis-tools
+
+services:
+  tools:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.tools
+    image: aegis-tools:dev
+    volumes:
+      - .:/workspace
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+      - pnpm-store:/root/.local/share/pnpm/store
+    working_dir: /workspace
+    tty: true
+
+volumes:
+  go-mod-cache:
+  go-build-cache:
+  pnpm-store:

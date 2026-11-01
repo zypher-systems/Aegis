@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package aegis.v1;
+
+option go_package = "github.com/zypher-systems/aegis/gen/aegis/v1;aegisv1";
+
+// TelemetryService carries batched access events from data plane to control
+// plane. Events are fire-and-forget: the proxy must never block a request
+// waiting on telemetry delivery.
+service TelemetryService {
+  rpc Push(stream TelemetryEvent) returns (TelemetryAck);
+}
+
+message TelemetryEvent {
+  int64 timestamp_unix_ms = 1;
+  string host_id = 2;
+  string domain = 3;
+  string method = 4;
+  string path = 5;
+  int32 status = 6;
+  double duration_ms = 7;
+  string client_ip = 8;
+  string user_agent = 9;
+  int64 bytes_sent = 10;
+  string node_id = 11;
+  string country = 12;
+  string waf_action = 13;
+  string waf_rule_id = 14;
+  double waf_score = 15;
+  // block_stage is empty (or "none") when the request was not stopped by a
+  // security stage. Values: waf, crowdsec, ratelimit, geo, acl.
+  string block_stage = 16;
+  // crowdsec_origin is the CrowdSec decision origin when block_stage is
+  // crowdsec (CAPI, crowdsec, lists, …). Empty when unknown.
+  string crowdsec_origin = 17;
+
+  // Request detail for the dashboard's per-request view (1.7.1).
+  // query is the raw query string, truncated to 1 KiB.
+  string query = 18;
+  string referer = 19;
+  // protocol is the HTTP version as received ("HTTP/1.1", "HTTP/2.0").
+  string protocol = 20;
+  // scheme is "https" when the request arrived over TLS on this node.
+  string scheme = 21;
+  // tls_version is empty for plain HTTP ("TLS 1.3").
+  string tls_version = 22;
+  // upstream is the target that answered ("http://10.0.0.5:8080"); empty
+  // when a stage stopped the request or no upstream was reached.
+  string upstream = 23;
+  // peer_ip is the TCP peer. It differs from client_ip when the request came
+  // through a trusted proxy (NPM, a CDN).
+  string peer_ip = 24;
+  int64 bytes_received = 25;
+  // block_detail says why block_stage stopped the request, in words
+  // ("country RU is denied", "over 10 req/s, burst 20").
+  string block_detail = 26;
+  // waf_matches are the CRS detection rules that matched, most severe first.
+  repeated WAFMatch waf_matches = 27;
+  // request_id identifies this request; the proxy also sends it upstream as
+  // X-Request-Id when the client did not set one.
+  string request_id = 28;
+}
+
+// WAFMatch is one CRS rule that matched a request.
+message WAFMatch {
+  string rule_id = 1;
+  string message = 2;
+  // severity follows CRS: 2 critical, 3 error, 4 warning, 5 notice.
+  int32 severity = 3;
+  // variable and key say where it matched: REQUEST_COOKIES + "session".
+  string variable = 4;
+  string key = 5;
+  // value is the matched input, truncated to 256 bytes.
+  string value = 6;
+}
+
+message TelemetryAck {
+  int64 received = 1;
+}
