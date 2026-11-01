@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -111,4 +112,23 @@ func TestFailingWebhookDoesNotBlockRaise(t *testing.T) {
 		t.Fatal("notice recorded regardless of delivery")
 	}
 	// Do not wait for the retries (15 s); the goroutine is independent.
+}
+
+// net/http puts the full URL in its errors, and these end up in the log and
+// the Settings test button; the secret is in that URL.
+func TestDeliveryErrorsHideTheWebhookURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	dest := srv.URL + "/services/T000/s3cret-path?token=s3cret-query"
+	srv.Close() // nothing listens: the POST fails with a transport error
+	c := New(nil, nil)
+	if err := c.SetWebhook(context.Background(), dest); err != nil {
+		t.Fatal(err)
+	}
+	err := c.Test(context.Background())
+	if err == nil {
+		t.Fatal("delivery to a closed server succeeded")
+	}
+	if strings.Contains(err.Error(), "s3cret") {
+		t.Fatalf("error leaks the webhook URL: %v", err)
+	}
 }

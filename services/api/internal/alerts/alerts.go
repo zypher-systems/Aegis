@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -248,19 +249,29 @@ func (c *Center) deliver(ctx context.Context, dest string, ev Event) error {
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, dest, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return withoutURL(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "aegis-alerts/1")
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return err
+		return withoutURL(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("webhook answered %s", resp.Status)
 	}
 	return nil
+}
+
+// withoutURL drops the URL net/http adds to its errors. The webhook URL
+// usually carries a secret, and these errors reach the log and the dashboard.
+func withoutURL(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		return ue.Err
+	}
+	return err
 }
 
 // Wait blocks until queued deliveries finish (shutdown).
