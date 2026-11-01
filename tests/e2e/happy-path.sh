@@ -322,6 +322,61 @@ d=json.load(sys.stdin)
 raise SystemExit(0 if int(d.get("received",0))>0 else 1)' \
   && ok "analytics summary received > 0" || bad "analytics summary ($sum)"
 
+echo "== refused writes change nothing =="
+host_field() { # host_field DOMAIN FIELD
+  curl -s "$API/api/hosts" -b "$(auth)" | python3 -c 'import json,sys
+domain,field=sys.argv[1],sys.argv[2]
+for h in json.load(sys.stdin):
+    if domain in (h.get("domain_names") or []):
+        print(h.get(field) or "", end="")
+        break
+' "$1" "$2"
+}
+wid=$(host_field waf.local id)
+wprofile=$(host_field waf.local waf_profile_id)
+[ -n "$wprofile" ] && ok "waf.local has a WAF profile" || bad "waf.local has a WAF profile"
+code=$(curl_mut -s -o /dev/null -w '%{http_code}' -X PUT "$API/api/hosts/$wid" -H 'Content-Type: application/json' \
+  -d '{"kind":"proxy","domain_names":["waf.local"],"upstream_host":"demo","upstream_port":80,"enabled":true,"tls_mode":"none","waf_profile_id":"not-a-uuid"}')
+check "malformed waf_profile_id 400" "$code" "400"
+check "WAF profile kept after a refused edit" "$(host_field waf.local waf_profile_id)" "$wprofile"
+
+admin_id=$(curl -s "$API/api/users" -b "$(auth)" | first_user_id)
+code=$(curl_mut -s -o /dev/null -w '%{http_code}' -X PUT "$API/api/users/$admin_id" -H 'Content-Type: application/json' \
+  -d '{"email":"renamed@aegis.local","name":"Renamed","password":"short"}')
+check "short password 400" "$code" "400"
+curl -s "$API/api/users" -b "$(auth)" | grep -q 'renamed@aegis.local' \
+  && bad "refused user edit saved the email" || ok "refused user edit saved nothing"
+curl_mut -sf -D "$HDRS" -o /dev/null -X PUT "$API/api/users/$admin_id" -H 'Content-Type: application/json' \
+  -d '{"email":"admin@aegis.local","name":"Admin","password":"supersecretpassword"}' \
+  && ok "user edit with a password" || bad "user edit with a password"
+capture_session
+curl -s "$API/api/me" -b "$(auth)" | grep -q 'admin@aegis.local' \
+  && ok "own session renewed after a password edit" || bad "own session renewed after a password edit"
+
+echo "== import binds certificates =="
+import_host='{"kind":"proxy","domain_names":["imported.local"],"upstream_scheme":"http","upstream_host":"demo","upstream_port":80,"enabled":true,"tls_mode":"auto"}'
+out=$(curl_mut -s -X POST "$API/api/hosts/import" -H 'Content-Type: application/json' -d "{\"hosts\":[$import_host]}")
+echo "$out" | grep -qE '"(created|skipped)":1' && ok "import accepted" || bad "import accepted ($out)"
+[ -n "$(host_field imported.local cert_id)" ] && ok "imported auto host has a certificate" || bad "imported auto host has a certificate"
+sleep 2
+code=$(edge_https imported.local -o /dev/null -w '%{http_code}')
+check "imported host serves HTTPS" "$code" "200"
+subj=$(echo | openssl s_client -connect "$HTTPS_HOSTPORT" -servername imported.local 2>/dev/null | openssl x509 -noout -subject 2>/dev/null || true)
+echo "$subj" | grep -q 'imported.local' && ok "imported host presents its own certificate" || bad "imported host certificate ($subj)"
+curl_mut -s -X POST "$API/api/hosts/import" -H 'Content-Type: application/json' -d "{\"mode\":\"update\",\"hosts\":[$import_host]}" >/dev/null
+[ -n "$(host_field imported.local cert_id)" ] && ok "update import keeps the certificate" || bad "update import keeps the certificate"
+out=$(curl_mut -s -X POST "$API/api/hosts/import" -H 'Content-Type: application/json' \
+  -d '{"hosts":[{"kind":"dead","domain_names":["byid.local"],"enabled":true,"tls_mode":"none","access_list_id":"11111111-1111-1111-1111-111111111111"}]}')
+echo "$out" | grep -q 'does not carry over' && ok "import refuses protection given by id" || bad "import refuses protection given by id ($out)"
+
+echo "== analytics groups =="
+for group in bucket host host_bucket; do
+  code=$(curl -s -o /dev/null -w '%{http_code}' "$API/api/analytics/rollups?period=hourly&group=$group" -b "$(auth)")
+  check "rollups group=$group 200" "$code" "200"
+done
+code=$(curl -s -o /dev/null -w '%{http_code}' "$API/api/analytics/geo?period=daily&group=country" -b "$(auth)")
+check "geo group=country 200" "$code" "200"
+
 echo
 echo "RESULT: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
