@@ -2,7 +2,7 @@
 
 All notable changes to Aegis are documented in this file.
 
-## [Unreleased] — 1.8.1
+## 1.8.1
 
 Fixes from a code review: protection that a bad id could remove, a webhook
 secret in the logs, imports without certificates, lost telemetry, and totals
@@ -49,7 +49,7 @@ that looked complete and were not.
   returned an error after the new email and name were already saved. The
   password is checked first, and all of it is saved in one write.
 
-## [Unreleased] — 1.8.0
+## 1.8.0
 
 The Graphite theme with a light alternate, and an Overview that says more.
 
@@ -113,7 +113,7 @@ The Graphite theme with a light alternate, and an Overview that says more.
 - **No npm in the web image.** The dashboard runs `node server.js`; the
   base image's npm is removed.
 
-## [Unreleased] — 1.7.2
+## 1.7.2
 
 Production-readiness fixes from the pre-cutover audit.
 
