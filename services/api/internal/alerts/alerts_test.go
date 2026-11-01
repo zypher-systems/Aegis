@@ -3,6 +3,8 @@ package alerts
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -130,5 +132,53 @@ func TestDeliveryErrorsHideTheWebhookURL(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "s3cret") {
 		t.Fatalf("error leaks the webhook URL: %v", err)
+	}
+}
+
+// The URL also reaches errors below the one net/http wraps: a redirect's
+// Location is quoted in the parse error it causes.
+func TestMalformedRedirectDoesNotRevealTheSecret(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", r.URL.Path+"%zz")
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	}))
+	t.Cleanup(srv.Close)
+	c := New(nil, nil)
+	if err := c.SetWebhook(context.Background(), srv.URL+"/services/s3cret-path"); err != nil {
+		t.Fatal(err)
+	}
+	err := c.Test(context.Background())
+	if err == nil {
+		t.Fatal("a malformed redirect was delivered")
+	}
+	if strings.Contains(err.Error(), "s3cret") {
+		t.Fatalf("error reveals the webhook URL: %v", err)
+	}
+}
+
+// The status text comes from the far end and can repeat the request's path.
+func TestStatusTextIsNotPassedOn(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		buf := make([]byte, 4096)
+		_, _ = conn.Read(buf)
+		fmt.Fprint(conn, "HTTP/1.1 500 s3cret-path refused\r\nContent-Length: 0\r\n\r\n")
+	}()
+	c := New(nil, nil)
+	if err := c.SetWebhook(context.Background(), "http://"+ln.Addr().String()+"/s3cret-path"); err != nil {
+		t.Fatal(err)
+	}
+	err = c.Test(context.Background())
+	if err == nil || strings.Contains(err.Error(), "s3cret") || !strings.Contains(err.Error(), "500") {
+		t.Fatalf("got %v, want the status code alone", err)
 	}
 }

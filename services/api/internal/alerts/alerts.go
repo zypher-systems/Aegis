@@ -6,14 +6,17 @@ package alerts
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/zypher-systems/aegis/services/api/internal/crypto"
@@ -249,29 +252,44 @@ func (c *Center) deliver(ctx context.Context, dest string, ev Event) error {
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, dest, bytes.NewReader(body))
 	if err != nil {
-		return withoutURL(err)
+		return errors.New("webhook URL is not valid")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "aegis-alerts/1")
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return withoutURL(err)
+		return deliveryError(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("webhook answered %s", resp.Status)
+		return fmt.Errorf("webhook answered %d", resp.StatusCode)
 	}
 	return nil
 }
 
-// withoutURL drops the URL net/http adds to its errors. The webhook URL
-// usually carries a secret, and these errors reach the log and the dashboard.
-func withoutURL(err error) error {
-	var ue *url.Error
-	if errors.As(err, &ue) {
-		return ue.Err
+// deliveryError says why a delivery failed in words of our own. The webhook
+// URL usually carries a secret, and net/http can quote it at any depth of an
+// error (a redirect's Location, say), so no text from err is passed on. These
+// messages reach the log and the dashboard.
+func deliveryError(err error) error {
+	var (
+		netErr  net.Error
+		dnsErr  *net.DNSError
+		certErr *tls.CertificateVerificationError
+	)
+	switch {
+	case errors.Is(err, context.Canceled):
+		return errors.New("webhook delivery was cancelled")
+	case errors.As(err, &dnsErr):
+		return errors.New("webhook host name did not resolve")
+	case errors.As(err, &certErr):
+		return errors.New("webhook certificate is not trusted")
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return errors.New("webhook refused the connection")
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &netErr) && netErr.Timeout():
+		return errors.New("webhook timed out")
 	}
-	return err
+	return errors.New("webhook could not be reached")
 }
 
 // Wait blocks until queued deliveries finish (shutdown).
