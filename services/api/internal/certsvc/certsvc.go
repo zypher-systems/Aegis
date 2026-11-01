@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/singleflight"
 
 	aegisv1 "github.com/zypher-systems/aegis/gen/aegis/v1"
 	"github.com/zypher-systems/aegis/services/api/internal/ca"
@@ -40,6 +41,9 @@ type Service struct {
 
 	mu         sync.Mutex
 	challenges []*aegisv1.Challenge
+
+	// orders runs one ACME order per set of names at a time.
+	orders singleflight.Group
 
 	// Renewal backoff per certificate: after a failure the next attempt
 	// waits 1h, 2h, 4h … up to a day, instead of hammering Let's Encrypt's

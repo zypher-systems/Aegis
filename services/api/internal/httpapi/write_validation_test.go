@@ -130,7 +130,7 @@ func TestWaitForCertAnswersAtTheDeadline(t *testing.T) {
 		close(ended)
 		return 0, ""
 	})
-	if status != http.StatusGatewayTimeout || !strings.Contains(msg, "import the file again") {
+	if status != http.StatusGatewayTimeout || !strings.Contains(msg, "in a few minutes") {
 		t.Fatalf("status %d, %q", status, msg)
 	}
 	if h.CertID != nil {
@@ -154,5 +154,31 @@ func TestWaitForCertSeesTheOrderThroughForAGoneClient(t *testing.T) {
 	})
 	if status != 0 || h.CertID == nil {
 		t.Fatalf("status %d, cert %v: the order was abandoned", status, h.CertID)
+	}
+}
+
+// Past the import's limits a host that needs no order is still saved, and one
+// that would place an order is not started.
+func TestImportCertLimitsOnlyHostsThatOrder(t *testing.T) {
+	late := time.Now().Add(-10 * time.Minute)
+	issued := 0
+	issue := func(*store.Host) (int, string) {
+		issued++
+		return 0, ""
+	}
+	for _, mode := range []string{"none", "custom", ""} {
+		if status, msg := importCert(context.Background(), &store.Host{TLSMode: mode}, late, issue); status != 0 {
+			t.Errorf("tls_mode %q left out: %d %q", mode, status, msg)
+		}
+	}
+	if issued != 3 {
+		t.Fatalf("issued %d times, want 3", issued)
+	}
+	status, msg := importCert(context.Background(), &store.Host{TLSMode: "auto"}, late, issue)
+	if status == 0 || !strings.Contains(msg, "not reached") {
+		t.Fatalf("auto host past the budget: %d %q", status, msg)
+	}
+	if issued != 3 {
+		t.Fatal("an order was started past the budget")
 	}
 }

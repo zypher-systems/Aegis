@@ -117,6 +117,9 @@ func hostErrText(err error, fallback string) string {
 	if errors.As(err, &dc) {
 		return dc.Error()
 	}
+	if errors.Is(err, store.ErrDomainTaken) {
+		return err.Error()
+	}
 	return fallback
 }
 
@@ -217,7 +220,20 @@ func waitForCert(ctx context.Context, h *store.Host, deadline time.Time, issue f
 	if ctx.Err() != nil {
 		return finish(<-done)
 	}
-	return http.StatusGatewayTimeout, "its certificate is still being issued; import the file again to finish"
+	return http.StatusGatewayTimeout, "its certificate is still being issued; import the file again in a few minutes"
+}
+
+// importCert gives one host its certificate. Only a TLS Auto host can place an
+// order, so only it has to fit the import's time limits; any other host is
+// saved however late in the import it comes.
+func importCert(ctx context.Context, h *store.Host, started time.Time, issue func(*store.Host) (int, string)) (int, string) {
+	if h.TLSMode != "auto" {
+		return issue(h)
+	}
+	if time.Since(started) > importCertBudget {
+		return http.StatusGatewayTimeout, "not reached: issuing certificates took too long; import the file again to continue"
+	}
+	return waitForCert(ctx, h, started.Add(importAnswerBy), issue)
 }
 
 // importRefProblem refuses an entry that has an access list or WAF profile
@@ -357,16 +373,11 @@ func (s *Server) importHosts(w http.ResponseWriter, r *http.Request) {
 			skipped++
 			continue
 		}
-		// After the skip: a host that stays as it is must not order a
-		// certificate.
-		if h.TLSMode == "auto" && time.Since(started) > importCertBudget {
-			problems = append(problems, problem{h.DomainNames, "not reached: issuing certificates took too long; import the file again to continue"})
-			continue
-		}
+		// After the skip, so a host that stays as it is orders nothing.
 		// Detached, like the order itself: a certificate that was issued
 		// has its host saved even if the client has since left.
 		detached := context.WithoutCancel(ctx)
-		status, msg := waitForCert(ctx, h, started.Add(importAnswerBy), func(own *store.Host) (int, string) {
+		status, msg := importCert(ctx, h, started, func(own *store.Host) (int, string) {
 			return s.resolveCert(detached, own)
 		})
 		if status != 0 {

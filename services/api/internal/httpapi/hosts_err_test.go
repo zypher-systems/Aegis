@@ -38,3 +38,13 @@ func TestWriteHostErrConflict(t *testing.T) {
 		t.Fatalf("fallback status = %d", rr.Code)
 	}
 }
+
+// Two imports can race to the same domain; the loser should say so.
+func TestHostErrTextNamesATakenDomain(t *testing.T) {
+	if got := hostErrText(store.ErrDomainTaken, "create failed"); got == "create failed" {
+		t.Fatalf("got %q", got)
+	}
+	if got := hostErrText(errors.New("boom"), "create failed"); got != "create failed" {
+		t.Fatalf("got %q", got)
+	}
+}

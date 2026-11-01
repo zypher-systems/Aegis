@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -67,6 +68,30 @@ const (
 // (expiring, or issued by another directory) it is renewed in place, so hosts
 // keep their cert_id and no stale row lingers.
 func (s *Service) obtainACME(ctx context.Context, domains []string) (uuid.UUID, error) {
+	// One order per set of names at a time. A running order is not saved yet,
+	// so a retry would not find it and would pay for a second one: it joins
+	// instead. Detached, so its outcome does not depend on the first caller.
+	ctx = context.WithoutCancel(ctx)
+	v, err, _ := s.orders.Do(orderKey(domains, s.acme.Directory), func() (any, error) {
+		return s.reuseOrIssue(ctx, domains)
+	})
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return v.(uuid.UUID), nil
+}
+
+// orderKey names a set of domains from one ACME directory, in any order.
+func orderKey(domains []string, directory string) string {
+	names := make([]string, 0, len(domains))
+	for _, d := range domains {
+		names = append(names, strings.ToLower(strings.TrimSpace(d)))
+	}
+	sort.Strings(names)
+	return directory + "|" + strings.Join(names, ",")
+}
+
+func (s *Service) reuseOrIssue(ctx context.Context, domains []string) (uuid.UUID, error) {
 	// A failed lookup must not read as "no certificate": each order counts
 	// against the account's limits.
 	metas, err := s.store.ListCertificateMeta(ctx)
