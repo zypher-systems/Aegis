@@ -2,7 +2,7 @@
 
 A security-first reverse proxy: a Go edge, a control plane, and a dashboard for the hosts in front of your apps. TLS, the OWASP CRS web application firewall, CrowdSec, and GeoIP are included. MIT licensed.
 
-![Sign in to Aegis](docs/images/login.png)
+![The Overview page: traffic, blocked requests, security posture and the busiest hosts](docs/images/overview.png)
 
 ## Deploy
 
@@ -52,7 +52,25 @@ Open `http://<this-machine>:3300` and create the first admin. The dashboard is f
 
 The stack includes a `demo` upstream (`traefik/whoami`). Add a host for `demo.local` aimed at `demo` port `80` and the dashboard will show it serving traffic.
 
-![Hosts](docs/images/hosts.png)
+## Dashboard
+
+Hosts lists every domain with its traffic, certificate and protection layers.
+
+![The Hosts page: a card for each domain with its traffic chart, certificate and protection layers](docs/images/hosts.png)
+
+Analytics shows traffic over time. Daily totals are kept for 90 days.
+
+![The Analytics page: daily traffic over 30 days](docs/images/analytics.png)
+
+The Security tab shows which layer stopped each blocked request.
+
+![The Security tab: blocked requests by layer](docs/images/security.png)
+
+Countries are mapped from the request's IP address.
+
+<img src="docs/images/countries.png" alt="The Countries card: a world map and the top countries by requests" width="520">
+
+These screenshots use demo data.
 
 ## Updating
 
