@@ -13,6 +13,16 @@ import (
 	aegisv1 "github.com/zypher-systems/aegis/gen/aegis/v1"
 )
 
+const (
+	// pushEvery is how long events wait for the next send. The ring has to
+	// hold whatever arrives in that time: 4096 events at 100 ms is about
+	// 40,000 events a second.
+	pushEvery = 100 * time.Millisecond
+	// pushBatch is how many events leave the ring at a time. It bounds what
+	// a broken stream has to put back, not throughput.
+	pushBatch = 512
+)
+
 // PushLoop drains the ring and streams events over mTLS. Reconnects forever.
 func PushLoop(ctx context.Context, addr string, tlsCfg *tls.Config, em *Emitter) {
 	backoff := time.Second
@@ -60,7 +70,7 @@ func pushOnce(ctx context.Context, addr string, tlsCfg *tls.Config, em *Emitter)
 	if err != nil {
 		return err
 	}
-	ticker := time.NewTicker(400 * time.Millisecond)
+	ticker := time.NewTicker(pushEvery)
 	defer ticker.Stop()
 	for {
 		select {
@@ -80,13 +90,33 @@ func pushOnce(ctx context.Context, addr string, tlsCfg *tls.Config, em *Emitter)
 			// on the next send, which would write into the dead stream.
 			return stream.Context().Err()
 		case <-ticker.C:
-			batch := em.Drain(128)
-			for i, ev := range batch {
-				if err := stream.Send(ev); err != nil {
-					em.Requeue(batch[i:])
-					return err
-				}
+			if err := sendQueued(ctx, stream, em); err != nil {
+				return err
 			}
 		}
 	}
+}
+
+// eventSender is the send side of the telemetry stream.
+type eventSender interface {
+	Send(*aegisv1.TelemetryEvent) error
+}
+
+// sendQueued sends until the ring is empty, so what the stream accepts sets
+// the throughput rather than a fixed amount per tick. On shutdown it leaves
+// the rest for the final flush.
+func sendQueued(ctx context.Context, stream eventSender, em *Emitter) error {
+	for ctx.Err() == nil {
+		batch := em.Drain(pushBatch)
+		if len(batch) == 0 {
+			return nil
+		}
+		for i, ev := range batch {
+			if err := stream.Send(ev); err != nil {
+				em.Requeue(batch[i:])
+				return err
+			}
+		}
+	}
+	return nil
 }

@@ -35,6 +35,11 @@ const (
 	pruneEvery  = 6 * time.Hour
 	onlineAfter = 60 * time.Second
 
+	// touchEvery bounds how often events update a node's last_seen. Well
+	// under onlineAfter so a busy node never reads as offline; a write per
+	// event would cap ingest at the rate Postgres commits.
+	touchEvery = 10 * time.Second
+
 	// The request log is written in batches this often; at most
 	// logPendingCap events wait between writes (more are counted and dropped
 	// rather than growing memory while Postgres is slow or down).
@@ -129,6 +134,7 @@ type Service struct {
 	pending    map[rollupKey]*rollupAcc
 	pendingGeo map[geoKey]int64
 	pendingLog []Event
+	touched    map[string]time.Time // node id → last touch
 }
 
 type geoKey struct {
@@ -160,6 +166,7 @@ func New(opts Options) *Service {
 		touch:        opts.TouchNode,
 		pending:      map[rollupKey]*rollupAcc{},
 		pendingGeo:   map[geoKey]int64{},
+		touched:      map[string]time.Time{},
 		logMode:      NormalizeLogMode(opts.RequestLog),
 		logKeep:      opts.LogRetention,
 		securityKeep: opts.SecurityRetention,
@@ -399,9 +406,25 @@ func (s *Service) Ingest(ctx context.Context, ev *aegisv1.TelemetryEvent) {
 		}
 	}
 	if s.touch != nil && e.NodeID != "" {
-		if id, err := uuid.Parse(e.NodeID); err == nil {
-			s.touch(ctx, id)
-		}
+		s.touchNode(ctx, e.NodeID)
+	}
+}
+
+// touchNode records that a node is alive, at most once per touchEvery.
+func (s *Service) touchNode(ctx context.Context, nodeID string) {
+	id, err := uuid.Parse(nodeID)
+	if err != nil {
+		return
+	}
+	now := time.Now()
+	s.mu.Lock()
+	due := now.Sub(s.touched[nodeID]) >= touchEvery
+	if due {
+		s.touched[nodeID] = now
+	}
+	s.mu.Unlock()
+	if due {
+		s.touch(ctx, id)
 	}
 }
 

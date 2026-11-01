@@ -42,6 +42,31 @@ func TestRequeuePutsUnsentBackInOrder(t *testing.T) {
 	}
 }
 
+func TestDroppedCountsEveryEventLost(t *testing.T) {
+	e := &Emitter{buf: make([]*aegisv1.TelemetryEvent, 3), cap: 3}
+	for i := 1; i <= 3; i++ {
+		e.Emit(&aegisv1.TelemetryEvent{Status: int32(i)})
+	}
+	if e.Dropped() != 0 {
+		t.Fatalf("dropped %d with room left", e.Dropped())
+	}
+	e.Emit(&aegisv1.TelemetryEvent{Status: 4}) // overwrites the oldest
+	e.Emit(&aegisv1.TelemetryEvent{Status: 5})
+	if e.Dropped() != 2 {
+		t.Fatalf("dropped %d after two overwrites, want 2", e.Dropped())
+	}
+	batch := e.Drain(2)
+	e.Emit(&aegisv1.TelemetryEvent{Status: 6}) // one slot left of the two freed
+	e.Requeue(batch)                           // only one of the two fits
+	if e.Dropped() != 3 {
+		t.Fatalf("dropped %d after a short requeue, want 3", e.Dropped())
+	}
+	var nilEmitter *Emitter
+	if nilEmitter.Dropped() != 0 {
+		t.Fatal("nil emitter must report zero")
+	}
+}
+
 func statuses(evs []*aegisv1.TelemetryEvent) []int32 {
 	out := make([]int32, len(evs))
 	for i, ev := range evs {

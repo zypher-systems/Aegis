@@ -78,6 +78,11 @@ gauges `aegis_proxy_config_version`, `aegis_proxy_hosts`,
 `docker compose exec proxy /aegis-proxy healthcheck`-style local access;
 publishing it needs a reverse-proxy rule of your own.
 
+`aegis_proxy_telemetry_dropped_total` counts access events the node lost
+because it could not send them to the control plane fast enough. While it
+grows, Analytics undercounts traffic and the request log has gaps. The
+counters above are not affected.
+
 `aegis_proxy_upstream_healthy{host,upstream}` is 1 while an origin passes its
 health checks.
 

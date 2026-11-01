@@ -92,6 +92,7 @@ func (m *metrics) write(w http.ResponseWriter, s *Server) {
 			fmt.Fprintf(&b, "aegis_proxy_upstream_healthy{host=%q,upstream=%q} %d\n", u.domain, u.addr, v)
 		}
 	}
+	fmt.Fprintf(&b, "# HELP aegis_proxy_telemetry_dropped_total Telemetry events lost because the node could not send them fast enough.\n# TYPE aegis_proxy_telemetry_dropped_total counter\naegis_proxy_telemetry_dropped_total %d\n", s.tel.Dropped())
 	fmt.Fprintf(&b, "# HELP aegis_proxy_problems Problems this node reports to the control plane.\n# TYPE aegis_proxy_problems gauge\naegis_proxy_problems %d\n", len(s.Problems()))
 	disabled := 0
 	if s.disabled.Load() {

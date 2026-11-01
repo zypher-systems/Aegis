@@ -4,6 +4,7 @@ package telemetry
 
 import (
 	"sync"
+	"sync/atomic"
 
 	aegisv1 "github.com/zypher-systems/aegis/gen/aegis/v1"
 )
@@ -18,6 +19,9 @@ type Emitter struct {
 	head int
 	n    int
 	cap  int
+
+	// dropped counts events lost to a full ring.
+	dropped atomic.Uint64
 }
 
 func NewEmitter() *Emitter {
@@ -33,6 +37,7 @@ func (e *Emitter) Emit(ev *aegisv1.TelemetryEvent) {
 	if e.n == e.cap {
 		e.head = (e.head + 1) % e.cap
 		e.n--
+		e.dropped.Add(1)
 	}
 	idx := (e.head + e.n) % e.cap
 	e.buf[idx] = ev
@@ -71,11 +76,21 @@ func (e *Emitter) Requeue(evs []*aegisv1.TelemetryEvent) {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	for i := len(evs) - 1; i >= 0 && e.n < e.cap; i-- {
+	i := len(evs) - 1
+	for ; i >= 0 && e.n < e.cap; i-- {
 		e.head = (e.head - 1 + e.cap) % e.cap
 		e.buf[e.head] = evs[i]
 		e.n++
 	}
+	e.dropped.Add(uint64(i + 1)) // the ones that did not fit
+}
+
+// Dropped is the number of events lost to a full ring since start.
+func (e *Emitter) Dropped() uint64 {
+	if e == nil {
+		return 0
+	}
+	return e.dropped.Load()
 }
 
 func (e *Emitter) Len() int {

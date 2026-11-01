@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	aegisv1 "github.com/zypher-systems/aegis/gen/aegis/v1"
 )
 
@@ -118,5 +120,29 @@ func TestBlockStageSummaryAndRollupGrain(t *testing.T) {
 	defer s.mu.Unlock()
 	if len(s.pending) != 3 {
 		t.Fatalf("pending keys=%d want 3", len(s.pending))
+	}
+}
+
+// A node's last_seen is a Postgres write. Per event it would cap ingest at
+// the rate Postgres commits, so it is written at most once per touchEvery.
+func TestNodeTouchIsThrottledPerNode(t *testing.T) {
+	const nodeA, nodeB = "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
+	touches := map[uuid.UUID]int{}
+	s := New(Options{TouchNode: func(_ context.Context, id uuid.UUID) { touches[id]++ }})
+	ctx := context.Background()
+	for range 1000 {
+		s.Ingest(ctx, &aegisv1.TelemetryEvent{Status: 200, NodeId: nodeA})
+	}
+	s.Ingest(ctx, &aegisv1.TelemetryEvent{Status: 200, NodeId: nodeB})
+	a, b := uuid.MustParse(nodeA), uuid.MustParse(nodeB)
+	if touches[a] != 1 || touches[b] != 1 {
+		t.Fatalf("touches after 1000+1 events: %v", touches)
+	}
+	s.mu.Lock()
+	s.touched[nodeA] = time.Now().Add(-touchEvery)
+	s.mu.Unlock()
+	s.Ingest(ctx, &aegisv1.TelemetryEvent{Status: 200, NodeId: nodeA})
+	if touches[a] != 2 {
+		t.Fatalf("a node past touchEvery was not touched again: %v", touches)
 	}
 }
