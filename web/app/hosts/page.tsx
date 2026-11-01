@@ -9,7 +9,7 @@ import type { AccessList, Certificate, Host, HostInput, RollupRow, WAFProfile } 
 import { AppShell } from "@/components/app-shell";
 import { HostDialog } from "@/components/host-dialog";
 import { Sparkline } from "@/components/charts";
-import { ActionMenu, Empty, ErrorState, Loading, PageHeader, Pager, SearchInput, StatusPill, usePaged, type Tone } from "@/components/ui";
+import { ActionMenu, Empty, ErrorState, Loading, Notice, PageHeader, Pager, SearchInput, StatusPill, usePaged, type Tone } from "@/components/ui";
 import { daysUntil, fmtInt, fmtLatency } from "@/lib/format";
 import { trafficByHost, type HostTraffic } from "@/lib/rollups";
 import { POLL_MS } from "@/lib/poll";
@@ -36,6 +36,7 @@ function Hosts() {
   const [wafProfiles, setWafProfiles] = useState<WAFProfile[]>([]);
   const [lists, setLists] = useState<AccessList[]>([]);
   const [rollups, setRollups] = useState<RollupRow[]>([]);
+  const [rollupsCut, setRollupsCut] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Host | null>(null);
@@ -69,13 +70,14 @@ function Hosts() {
         api.certificates().catch(() => [] as Certificate[]),
         api.wafProfiles().catch(() => [] as WAFProfile[]),
         api.accessLists().catch(() => [] as AccessList[]),
-        api.analyticsRollups("hourly", { from }).catch(() => ({ rows: [] as RollupRow[] })),
+        api.analyticsRollups("hourly", { from, group: "host_bucket" }).catch(() => ({ rows: [] as RollupRow[], truncated: false })),
       ]);
       setHosts(h);
       setCerts(c);
       setWafProfiles(w);
       setLists(a);
       setRollups(r.rows ?? []);
+      setRollupsCut(!!r.truncated);
       setErr(null);
     } catch (e) {
       if (isUnauthorized(e)) return;
@@ -151,6 +153,7 @@ function Hosts() {
       return;
     }
     const update = window.confirm(`Import ${list.length} host${list.length === 1 ? "" : "s"}.\n\nOK: replace hosts here whose domain already exists.\nCancel: skip those and only add new ones.`);
+    setImportMsg("Importing. Hosts on automatic TLS get their certificates now, which can take a few minutes.");
     try {
       const out = await api.importHosts(list, update ? "update" : "skip");
       const parts = [`${out.created} added`, `${out.updated} replaced`, `${out.skipped} skipped`];
@@ -259,6 +262,14 @@ function Hosts() {
       {err && (
         <div className="mt-4">
           <ErrorState message={err} onRetry={load} />
+        </div>
+      )}
+
+      {rollupsCut && (
+        <div className="mt-4">
+          <Notice tone="warn" title="Traffic figures are incomplete">
+            <p>There is more traffic data than one request returns, so the oldest of the last 24 hours are missing from these totals and charts.</p>
+          </Notice>
         </div>
       )}
 

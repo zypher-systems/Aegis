@@ -38,9 +38,10 @@ func TestParseRollupQuery(t *testing.T) {
 func TestParseRollupQueryGroup(t *testing.T) {
 	now := time.Date(2026, 9, 8, 22, 0, 0, 0, time.UTC)
 	for param, want := range map[string]store.RollupGroup{
-		"bucket": store.RollupByBucket,
-		"host":   store.RollupByHost,
-		"":       store.RollupRaw,
+		"bucket":      store.RollupByBucket,
+		"host":        store.RollupByHost,
+		"host_bucket": store.RollupByHostBucket,
+		"":            store.RollupRaw,
 		// An unknown value falls back to the stored rows rather than failing.
 		"domain": store.RollupRaw,
 	} {

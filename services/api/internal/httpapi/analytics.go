@@ -105,7 +105,8 @@ func (s *Server) analyticsGeo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := parseRollupQuery(r, time.Now().UTC())
-	rows, err := s.st.ListGeo(r.Context(), q.Daily, q.From, q.To, q.HostID)
+	byCountry := r.URL.Query().Get("group") == "country"
+	rows, err := s.st.ListGeo(r.Context(), q.Daily, q.From, q.To, q.HostID, byCountry)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "db error")
 		return
@@ -123,7 +124,8 @@ type rollupQuery struct {
 	HostID string
 	Period string
 	// Group is the rollups-only "group" parameter: "bucket" sums hosts away,
-	// "host" sums buckets away, anything else returns the stored rows.
+	// "host" sums buckets away, "host_bucket" keeps both and sums status
+	// classes and stages, anything else returns the stored rows.
 	Group store.RollupGroup
 }
 
@@ -154,6 +156,8 @@ func parseRollupQuery(r *http.Request, now time.Time) rollupQuery {
 		group = store.RollupByBucket
 	case string(store.RollupByHost):
 		group = store.RollupByHost
+	case string(store.RollupByHostBucket):
+		group = store.RollupByHostBucket
 	}
 	return rollupQuery{Daily: daily, From: from, To: to, HostID: hostID, Period: period, Group: group}
 }

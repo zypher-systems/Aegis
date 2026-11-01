@@ -78,16 +78,25 @@ const (
 	// stage, busiest host first. bucket_start is the host's earliest bucket
 	// in the range.
 	RollupByHost RollupGroup = "host"
+	// RollupByHostBucket keeps buckets and hosts and sums the rest: up to two
+	// rows per bucket and host, served (block_stage "") and blocked
+	// (block_stage "blocked", every stage together), status_class 0.
+	RollupByHostBucket RollupGroup = "host_bucket"
 )
 
-// RollupRowCap is the most rows one ListRollups call returns.
-const RollupRowCap = 2000
+const (
+	// RollupRowCap is the most rows one ListRollups call returns.
+	RollupRowCap = 2000
+	// RollupHostBucketCap replaces it for RollupByHostBucket, whose rows grow
+	// with the hosts by design: a day of 25 hourly buckets for 500 hosts.
+	RollupHostBucketCap = 25 * 2 * 500
+)
 
 // ListRollups returns hourly or daily rows with from <= bucket_start < to,
 // newest bucket first (busiest host first for RollupByHost). hostID empty
 // means every host. truncated reports that more rows matched than
-// RollupRowCap: the ones left out are the oldest buckets (the quietest hosts
-// for RollupByHost), so a caller must not read their absence as zero.
+// the cap: the ones left out are the oldest buckets (the quietest hosts for
+// RollupByHost), so a caller must not read their absence as zero.
 func (s *Store) ListRollups(ctx context.Context, daily bool, from, to time.Time, hostID string, group RollupGroup) (out []RollupRow, truncated bool, err error) {
 	if s == nil || s.pool == nil {
 		return nil, false, nil
@@ -118,6 +127,14 @@ func (s *Store) ListRollups(ctx context.Context, daily bool, from, to time.Time,
 		FROM ` + table + where + `
 		GROUP BY host_id, status_class, block_stage
 		ORDER BY SUM(SUM(count)) OVER (PARTITION BY host_id) DESC, host_id, status_class, block_stage`
+	case RollupByHostBucket:
+		q = `
+		SELECT bucket_start, host_id, MIN(domain) AS domain, 0 AS status_class,
+		       CASE WHEN block_stage = '' THEN '' ELSE 'blocked' END AS outcome,
+		       SUM(count)::bigint, SUM(latency_sum_ms), SUM(bytes_sum)::bigint
+		FROM ` + table + where + `
+		GROUP BY bucket_start, host_id, outcome
+		ORDER BY bucket_start DESC, host_id, outcome`
 	default:
 		q = `
 		SELECT bucket_start, host_id, domain, status_class, block_stage,
@@ -125,8 +142,12 @@ func (s *Store) ListRollups(ctx context.Context, daily bool, from, to time.Time,
 		FROM ` + table + where + `
 		ORDER BY bucket_start DESC`
 	}
+	rowCap := RollupRowCap
+	if group == RollupByHostBucket {
+		rowCap = RollupHostBucketCap
+	}
 	// One past the cap, so a full page can be told from a cut one.
-	q += fmt.Sprintf(` LIMIT %d`, RollupRowCap+1)
+	q += fmt.Sprintf(` LIMIT %d`, rowCap+1)
 	rows, err := s.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, false, err
@@ -144,8 +165,8 @@ func (s *Store) ListRollups(ctx context.Context, daily bool, from, to time.Time,
 	if err := rows.Err(); err != nil {
 		return nil, false, err
 	}
-	if len(out) > RollupRowCap {
-		return out[:RollupRowCap], true, nil
+	if len(out) > rowCap {
+		return out[:rowCap], true, nil
 	}
 	return out, false, nil
 }
@@ -210,7 +231,10 @@ func (s *Store) upsertGeo(ctx context.Context, table string, rows []GeoRollupRow
 	return nil
 }
 
-func (s *Store) ListGeo(ctx context.Context, daily bool, from, to time.Time, hostID string) ([]GeoRollupRow, error) {
+// ListGeo returns country rollups with from <= bucket_start < to. byCountry
+// sums hosts and buckets away, one row per country, so the result is complete
+// for any range. Otherwise it returns stored rows, newest 4000.
+func (s *Store) ListGeo(ctx context.Context, daily bool, from, to time.Time, hostID string, byCountry bool) ([]GeoRollupRow, error) {
 	if s == nil || s.pool == nil {
 		return nil, nil
 	}
@@ -218,16 +242,16 @@ func (s *Store) ListGeo(ctx context.Context, daily bool, from, to time.Time, hos
 	if daily {
 		table = "analytics_geo_daily"
 	}
-	q := `
-		SELECT bucket_start, host_id, country, count
-		FROM ` + table + `
-		WHERE bucket_start >= $1 AND bucket_start < $2`
+	where := ` WHERE bucket_start >= $1 AND bucket_start < $2`
 	args := []any{from, to}
 	if hostID != "" {
-		q += ` AND host_id = $3`
+		where += ` AND host_id = $3`
 		args = append(args, hostID)
 	}
-	q += ` ORDER BY bucket_start DESC LIMIT 4000`
+	q := `SELECT bucket_start, host_id, country, count FROM ` + table + where + ` ORDER BY bucket_start DESC LIMIT 4000`
+	if byCountry {
+		q = `SELECT MIN(bucket_start), '' AS host_id, country, SUM(count)::bigint FROM ` + table + where + ` GROUP BY country ORDER BY 4 DESC`
+	}
 	rows, err := s.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err

@@ -253,12 +253,13 @@ export const api = {
     return req<RequestLogPage>(`/api/analytics/requests?${q.toString()}`).then((p) => ({ ...p, events: p.events ?? [] }));
   },
   // group "bucket" sums hosts away (one row per bucket, status class and
-  // stage); "host" sums buckets away (per host, busiest first). truncated
+  // stage); "host" sums buckets away (per host, busiest first); "host_bucket"
+  // keeps both and sums the rest (block_stage is "" or "blocked"). truncated
   // means more rows matched than one response carries: the oldest buckets
   // (the quietest hosts for "host") are missing, not zero.
   analyticsRollups: (
     period: "hourly" | "daily" = "hourly",
-    opts?: { from?: string; to?: string; host_id?: string; group?: "bucket" | "host" },
+    opts?: { from?: string; to?: string; host_id?: string; group?: "bucket" | "host" | "host_bucket" },
   ) => {
     const q = new URLSearchParams({ period });
     if (opts?.from) q.set("from", opts.from);
@@ -267,11 +268,13 @@ export const api = {
     if (opts?.group) q.set("group", opts.group);
     return req<{ rows: RollupRow[]; truncated?: boolean }>(`/api/analytics/rollups?${q.toString()}`);
   },
-  analyticsGeo: (period: "hourly" | "daily" = "hourly", opts?: { from?: string; to?: string; host_id?: string }) => {
+  // group "country" sums hosts and buckets away, so the totals are complete.
+  analyticsGeo: (period: "hourly" | "daily" = "hourly", opts?: { from?: string; to?: string; host_id?: string; group?: "country" }) => {
     const q = new URLSearchParams({ period });
     if (opts?.from) q.set("from", opts.from);
     if (opts?.to) q.set("to", opts.to);
     if (opts?.host_id) q.set("host_id", opts.host_id);
+    if (opts?.group) q.set("group", opts.group);
     return req<{ rows: GeoRollupRow[] }>(`/api/analytics/geo?${q.toString()}`);
   },
 };

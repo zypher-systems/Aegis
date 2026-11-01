@@ -50,6 +50,7 @@ export default function AnalyticsPage() {
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [events, setEvents] = useState<AnalyticsEvent[] | null>(null);
   const [rollups, setRollups] = useState<RollupRow[]>([]);
+  const [rollupsCut, setRollupsCut] = useState(false);
   const [geoRows, setGeoRows] = useState<GeoRollupRow[]>([]);
   const [hosts, setHosts] = useState<Host[]>([]);
   const [range, setRange] = useState<RangeKey>("live");
@@ -123,8 +124,8 @@ export default function AnalyticsPage() {
       const [sum, live, hist, geoHist, status, hostList, geo] = await Promise.all([
         api.analyticsSummary(),
         api.analyticsLive(40),
-        api.analyticsRollups(args.period, args.opts),
-        api.analyticsGeo(args.period, args.opts).catch(() => ({ rows: [] as GeoRollupRow[] })),
+        api.analyticsRollups(args.period, { ...args.opts, group: "bucket" }),
+        api.analyticsGeo(args.period, { ...args.opts, group: "country" }).catch(() => ({ rows: [] as GeoRollupRow[] })),
         api.crowdsecStatus(),
         api.hosts(),
         api.geoipStatus(),
@@ -133,6 +134,7 @@ export default function AnalyticsPage() {
       setSummary(sum);
       setEvents(live.events ?? []);
       setRollups(hist.rows ?? []);
+      setRollupsCut(!!hist.truncated);
       setGeoRows(geoHist.rows ?? []);
       setHosts(hostList ?? []);
       setCs(status);
@@ -282,6 +284,13 @@ export default function AnalyticsPage() {
           <ErrorState message={err} onRetry={() => load(range, hostID)} />
         </div>
       )}
+      {rollupsCut && (
+        <div className="mt-5">
+          <Notice tone="warn" title="These figures cover only the most recent part of the range">
+            <p>The range holds more data than one request returns. Pick a shorter range for complete figures.</p>
+          </Notice>
+        </div>
+      )}
       {geoReady === false && (
         <div className="mt-5">
           <Notice tone="warn" title="GeoIP database missing">
@@ -393,7 +402,7 @@ export default function AnalyticsPage() {
           </div>
           {rollups.length > 0 && (
             <p className="mt-4 text-xs text-faint">
-              {fmtInt(rollups.length)} rollup row{rollups.length === 1 ? "" : "s"} persisted.
+              {fmtInt(rollups.length)} rollup row{rollups.length === 1 ? "" : "s"} in this range.
             </p>
           )}
         </TabPanel>
