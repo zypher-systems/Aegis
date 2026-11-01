@@ -131,6 +131,21 @@ func (s *Store) UpdateUser(ctx context.Context, id uuid.UUID, email, name string
 	return u, nil
 }
 
+// UpdateUserWithPassword is UpdateUser plus a new password in one statement,
+// so either all of it is saved or none. Like SetPassword it ends the user's
+// other sessions.
+func (s *Store) UpdateUserWithPassword(ctx context.Context, id uuid.UUID, email, name, passwordHash string) (*User, error) {
+	u, err := scanUser(s.pool.QueryRow(ctx, `
+		UPDATE users SET email = $2, name = $3, password_hash = $4,
+			session_epoch = session_epoch + 1, updated_at = now()
+		WHERE id = $1
+		RETURNING `+userCols, id, email, name, passwordHash))
+	if err != nil {
+		return nil, mapUserErr(err)
+	}
+	return u, nil
+}
+
 func (s *Store) SetPassword(ctx context.Context, id uuid.UUID, passwordHash string) (*User, error) {
 	return scanUser(s.pool.QueryRow(ctx, `
 		UPDATE users SET password_hash = $2, session_epoch = session_epoch + 1, updated_at = now()

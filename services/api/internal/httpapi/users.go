@@ -76,7 +76,25 @@ func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "email is required")
 		return
 	}
-	u, err := s.st.UpdateUser(r.Context(), id, req.Email, req.Name)
+	// Check everything first and save in one write: a refused password must
+	// leave the account as it was.
+	var hash string
+	if req.Password != "" {
+		if len(req.Password) < 10 {
+			writeErr(w, http.StatusBadRequest, "password must be at least 10 characters")
+			return
+		}
+		if hash, err = auth.HashPassword(req.Password); err != nil {
+			writeErr(w, http.StatusInternalServerError, "hash error")
+			return
+		}
+	}
+	var u *store.User
+	if hash != "" {
+		u, err = s.st.UpdateUserWithPassword(r.Context(), id, req.Email, req.Name, hash)
+	} else {
+		u, err = s.st.UpdateUser(r.Context(), id, req.Email, req.Name)
+	}
 	if errors.Is(err, store.ErrNotFound) {
 		writeErr(w, http.StatusNotFound, "not found")
 		return
@@ -90,21 +108,7 @@ func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	summary := map[string]any{"email": u.Email}
-	if req.Password != "" {
-		if len(req.Password) < 10 {
-			writeErr(w, http.StatusBadRequest, "password must be at least 10 characters")
-			return
-		}
-		hash, err := auth.HashPassword(req.Password)
-		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "hash error")
-			return
-		}
-		u, err = s.st.SetPassword(r.Context(), id, hash)
-		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "password update failed")
-			return
-		}
+	if hash != "" {
 		summary["password_reset"] = true
 		if me := userFromCtx(r); me != nil && me.ID == id {
 			s.setSession(w, r, u)

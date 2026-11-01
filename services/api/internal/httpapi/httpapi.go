@@ -486,6 +486,29 @@ func (hr hostRequest) toHost() *store.Host {
 	return h
 }
 
+// refProblem reports an access list, WAF profile or certificate id that is
+// not a UUID. toHost leaves those nil, which the store saves as "none", so a
+// bad id must stop the write or it takes the protection off the host. An
+// empty id is how a client clears the reference.
+func (hr hostRequest) refProblem() string {
+	for _, ref := range []struct {
+		field string
+		id    *string
+	}{
+		{"access_list_id", hr.AccessListID},
+		{"waf_profile_id", hr.WAFProfileID},
+		{"cert_id", hr.CertID},
+	} {
+		if ref.id == nil || *ref.id == "" {
+			continue
+		}
+		if _, err := uuid.Parse(*ref.id); err != nil {
+			return ref.field + " is not a valid id"
+		}
+	}
+	return ""
+}
+
 // hostHeaderRe is a host or host:port (IPv6 in brackets); no spaces or
 // control characters, so it can never smuggle another header.
 var hostHeaderRe = regexp.MustCompile(`^[A-Za-z0-9.\-_:\[\]]{1,255}$`)
@@ -606,6 +629,10 @@ func (s *Server) createHost(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
+	if msg := req.refProblem(); msg != "" {
+		writeErr(w, http.StatusBadRequest, msg)
+		return
+	}
 	h := req.toHost()
 	if msg := validateHost(h); msg != "" {
 		writeErr(w, http.StatusBadRequest, msg)
@@ -655,6 +682,10 @@ func (s *Server) updateHost(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
+	if msg := req.refProblem(); msg != "" {
+		writeErr(w, http.StatusBadRequest, msg)
+		return
+	}
 	h := req.toHost()
 	h.ID = id
 	if msg := validateHost(h); msg != "" {
@@ -699,34 +730,42 @@ func (s *Server) deleteHost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) bindCert(w http.ResponseWriter, r *http.Request, h *store.Host) bool {
+	if status, msg := s.resolveCert(r.Context(), h); status != 0 {
+		writeErr(w, status, msg)
+		return false
+	}
+	return true
+}
+
+// resolveCert sets h.CertID for its TLS mode, issuing a certificate for an
+// auto host when none covers it. On failure it returns the HTTP status and
+// message; status 0 means the host is ready to save.
+func (s *Server) resolveCert(ctx context.Context, h *store.Host) (int, string) {
 	if h.Kind == "stream" || h.TLSMode == "none" {
 		h.CertID = nil
 		if h.Kind == "stream" {
 			h.TLSMode = "none"
 		}
-		return true
+		return 0, ""
 	}
 	switch h.TLSMode {
 	case "auto":
 		if s.certs == nil {
-			writeErr(w, http.StatusBadGateway, "certificate service unavailable")
-			return false
+			return http.StatusBadGateway, "certificate service unavailable"
 		}
-		certID, err := s.certs.EnsureForHost(r.Context(), h.DomainNames)
+		certID, err := s.certs.EnsureForHost(ctx, h.DomainNames)
 		if err != nil {
-			writeErr(w, http.StatusBadGateway, "certificate issuance failed: "+err.Error())
-			return false
+			return http.StatusBadGateway, "certificate issuance failed: " + err.Error()
 		}
 		h.CertID = &certID
 	case "custom":
 		if h.CertID == nil {
-			writeErr(w, http.StatusBadRequest, "cert_id is required when tls_mode=custom")
-			return false
+			return http.StatusBadRequest, "cert_id is required when tls_mode=custom"
 		}
 	default:
 		h.CertID = nil
 	}
-	return true
+	return 0, ""
 }
 
 func (s *Server) requireHostFeatures(w http.ResponseWriter, h *store.Host) bool {

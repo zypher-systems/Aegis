@@ -175,11 +175,32 @@ func (s *Server) exportHosts(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// importCertBudget is how long an import keeps taking on TLS Auto hosts.
+// Issuance runs inline and an ACME order can take a minute or more, so a large
+// import must stop while the dashboard's five-minute proxy timeout still lets
+// it report what happened. Importing the same file again carries on.
+const importCertBudget = 3 * time.Minute
+
+// importRefProblem refuses an entry that has an access list or WAF profile
+// id but no name: ids do not carry over between installs, so it could only be
+// imported without the protection it asks for. An export always has names.
+func importRefProblem(hr hostRequest, listName, profileName *string) string {
+	named := func(s *string) bool { return s != nil && *s != "" }
+	if named(hr.AccessListID) && !named(listName) {
+		return "its access list is given by id, which does not carry over; use a file from Export"
+	}
+	if named(hr.WAFProfileID) && !named(profileName) {
+		return "its WAF profile is given by id, which does not carry over; use a file from Export"
+	}
+	return ""
+}
+
 // importHosts creates hosts from an export. A host whose domain is already
 // configured is skipped, or replaced when mode is "update". Named access
 // lists, WAF profiles and custom certificates must already exist here;
 // a host naming one that does not is reported and left out rather than
-// imported unprotected.
+// imported unprotected. TLS Auto hosts get a certificate the way a host
+// added by hand does, and one that cannot get one is reported and left out.
 func (s *Server) importHosts(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Mode  string            `json:"mode"` // skip (default) | update
@@ -235,6 +256,7 @@ func (s *Server) importHosts(w http.ResponseWriter, r *http.Request) {
 	var created, updated, skipped int
 	problems := []problem{}
 	changed := false
+	started := time.Now()
 	for _, raw := range req.Hosts {
 		var hr hostRequest
 		if err := json.Unmarshal(raw, &hr); err != nil {
@@ -249,6 +271,10 @@ func (s *Server) importHosts(w http.ResponseWriter, r *http.Request) {
 		_ = json.Unmarshal(raw, &names)
 		h := hr.toHost()
 		h.CertID, h.AccessListID, h.WAFProfileID = nil, nil, nil
+		if msg := importRefProblem(hr, names.AccessListName, names.WAFProfileName); msg != "" {
+			problems = append(problems, problem{h.DomainNames, msg})
+			continue
+		}
 		if names.AccessListName != nil && *names.AccessListName != "" {
 			id, ok := listByName[strings.ToLower(*names.AccessListName)]
 			if !ok {
@@ -284,11 +310,21 @@ func (s *Server) importHosts(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
+		if match != nil && req.Mode == "skip" {
+			skipped++
+			continue
+		}
+		// After the skip: a host that stays as it is must not order a
+		// certificate.
+		if h.TLSMode == "auto" && time.Since(started) > importCertBudget {
+			problems = append(problems, problem{h.DomainNames, "not reached: issuing certificates took too long; import the file again to continue"})
+			continue
+		}
+		if status, msg := s.resolveCert(ctx, h); status != 0 {
+			problems = append(problems, problem{h.DomainNames, msg})
+			continue
+		}
 		if match != nil {
-			if req.Mode == "skip" {
-				skipped++
-				continue
-			}
 			h.ID = match.ID
 			if _, err := s.st.UpdateHost(ctx, h); err != nil {
 				problems = append(problems, problem{h.DomainNames, hostErrText(err, "update failed")})
