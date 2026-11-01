@@ -67,18 +67,22 @@ const (
 // (expiring, or issued by another directory) it is renewed in place, so hosts
 // keep their cert_id and no stale row lingers.
 func (s *Service) obtainACME(ctx context.Context, domains []string) (uuid.UUID, error) {
+	// A failed lookup must not read as "no certificate": each order counts
+	// against the account's limits.
+	metas, err := s.store.ListCertificateMeta(ctx)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("list certificates: %w", err)
+	}
 	replace := uuid.Nil
-	if metas, err := s.store.ListCertificateMeta(ctx); err == nil {
-		for _, m := range metas {
-			if m.Issuer != "letsencrypt" || !covers(m.Domains, domains) {
-				continue
-			}
-			if m.Directory == s.acme.Directory && time.Now().Add(s.RenewBefore()).Before(m.ExpiresAt) {
-				return m.ID, nil
-			}
-			if replace == uuid.Nil && sameNames(m.Domains, domains) {
-				replace = m.ID
-			}
+	for _, m := range metas {
+		if m.Issuer != "letsencrypt" || !covers(m.Domains, domains) {
+			continue
+		}
+		if m.Directory == s.acme.Directory && time.Now().Add(s.RenewBefore()).Before(m.ExpiresAt) {
+			return m.ID, nil
+		}
+		if replace == uuid.Nil && sameNames(m.Domains, domains) {
+			replace = m.ID
 		}
 	}
 	return s.issueACME(ctx, domains, replace)

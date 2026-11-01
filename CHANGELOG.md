@@ -16,14 +16,19 @@ that looked complete and were not.
   the access list or WAF profile. An empty value still clears the field.
 - **Webhook errors no longer reveal the webhook URL.** A failed delivery wrote
   the full URL, secret path and query included, to the API log, and the
-  Settings test button showed it. Only the cause of the failure is kept now.
+  Settings test button showed it. A delivery error is now one of a few fixed
+  messages or the status code, so nothing the far end sends is repeated.
 - **Imported hosts get their certificates.** Import saved TLS Auto hosts
   without requesting one, so on a fresh install it reported success while
   HTTPS had no valid certificate and nothing would ever issue one. It now
   issues them as adding a host by hand does, and a host that cannot get one is
   reported and left out. Hosts that are skipped order nothing. Issuance runs
-  during the import, so a large one on Let's Encrypt stops after three minutes
-  and reports the hosts it did not reach; importing the file again continues.
+  during the import, so a large one on Let's Encrypt starts no order after
+  three minutes and answers within four and a half, reporting the hosts it did
+  not reach; importing the file again continues and reuses what was issued. If
+  the client leaves, the import ends after the host it is working on, so no
+  more orders are placed. A failed certificate lookup no longer places an
+  order either.
 - **Import no longer drops protection given only by id.** An entry with an
   `access_list_id` or `waf_profile_id` but no name, such as a copy of the API's
   host JSON, was imported without it. It is now reported and left out.

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -175,11 +176,49 @@ func (s *Server) exportHosts(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// importCertBudget is how long an import keeps taking on TLS Auto hosts.
-// Issuance runs inline and an ACME order can take a minute or more, so a large
-// import must stop while the dashboard's five-minute proxy timeout still lets
-// it report what happened. Importing the same file again carries on.
-const importCertBudget = 3 * time.Minute
+const (
+	// importCertBudget is how long an import keeps starting ACME orders.
+	// Importing the same file again carries on with the rest.
+	importCertBudget = 3 * time.Minute
+	// importAnswerBy is when it answers, whatever is still running, inside
+	// the dashboard's five-minute proxy timeout.
+	importAnswerBy = 4*time.Minute + 30*time.Second
+)
+
+// waitForCert runs issue on a copy of h and applies the result to h. An ACME
+// order cannot be interrupted, so the wait is what has a limit: at the
+// deadline it reports the host as not imported, and the order carries on and
+// saves its certificate, which the next import of the file picks up. A client
+// that has left needs no answer, so the wait then runs until the order ends
+// and its host can be saved.
+func waitForCert(ctx context.Context, h *store.Host, deadline time.Time, issue func(*store.Host) (int, string)) (int, string) {
+	type result struct {
+		status int
+		msg    string
+		host   store.Host
+	}
+	done := make(chan result, 1)
+	own := *h
+	go func() {
+		status, msg := issue(&own)
+		done <- result{status, msg, own}
+	}()
+	finish := func(r result) (int, string) {
+		*h = r.host
+		return r.status, r.msg
+	}
+	timer := time.NewTimer(time.Until(deadline))
+	defer timer.Stop()
+	select {
+	case r := <-done:
+		return finish(r)
+	case <-timer.C:
+	}
+	if ctx.Err() != nil {
+		return finish(<-done)
+	}
+	return http.StatusGatewayTimeout, "its certificate is still being issued; import the file again to finish"
+}
 
 // importRefProblem refuses an entry that has an access list or WAF profile
 // id but no name: ids do not carry over between installs, so it could only be
@@ -201,6 +240,7 @@ func importRefProblem(hr hostRequest, listName, profileName *string) string {
 // a host naming one that does not is reported and left out rather than
 // imported unprotected. TLS Auto hosts get a certificate the way a host
 // added by hand does, and one that cannot get one is reported and left out.
+// If the client leaves, the import ends after the host it is working on.
 func (s *Server) importHosts(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Mode  string            `json:"mode"` // skip (default) | update
@@ -258,6 +298,9 @@ func (s *Server) importHosts(w http.ResponseWriter, r *http.Request) {
 	changed := false
 	started := time.Now()
 	for _, raw := range req.Hosts {
+		if ctx.Err() != nil {
+			break
+		}
 		var hr hostRequest
 		if err := json.Unmarshal(raw, &hr); err != nil {
 			problems = append(problems, problem{nil, "not a host object"})
@@ -320,13 +363,20 @@ func (s *Server) importHosts(w http.ResponseWriter, r *http.Request) {
 			problems = append(problems, problem{h.DomainNames, "not reached: issuing certificates took too long; import the file again to continue"})
 			continue
 		}
-		if status, msg := s.resolveCert(ctx, h); status != 0 {
+		// Detached, like the order itself: a certificate that was issued
+		// has its host saved even if the client has since left.
+		detached := context.WithoutCancel(ctx)
+		status, msg := waitForCert(ctx, h, started.Add(importAnswerBy), func(own *store.Host) (int, string) {
+			return s.resolveCert(detached, own)
+		})
+		if status != 0 {
 			problems = append(problems, problem{h.DomainNames, msg})
 			continue
 		}
+		r := r.WithContext(detached)
 		if match != nil {
 			h.ID = match.ID
-			if _, err := s.st.UpdateHost(ctx, h); err != nil {
+			if _, err := s.st.UpdateHost(detached, h); err != nil {
 				problems = append(problems, problem{h.DomainNames, hostErrText(err, "update failed")})
 				continue
 			}
@@ -335,7 +385,7 @@ func (s *Server) importHosts(w http.ResponseWriter, r *http.Request) {
 			changed = true
 			continue
 		}
-		out, err := s.st.CreateHost(ctx, h)
+		out, err := s.st.CreateHost(detached, h)
 		if err != nil {
 			problems = append(problems, problem{h.DomainNames, hostErrText(err, "create failed")})
 			continue

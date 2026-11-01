@@ -7,9 +7,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/zypher-systems/aegis/services/api/internal/store"
 )
 
 // withID routes a request the way chi would for /{id}.
@@ -101,5 +104,55 @@ func TestResolveCertReportsWhatBindCertWrites(t *testing.T) {
 	h.CertID = &id
 	if status, _ := s.resolveCert(context.Background(), h); status != 0 || h.CertID != nil {
 		t.Fatalf("tls none keeps its certificate: %d %v", status, h.CertID)
+	}
+}
+
+func TestWaitForCertAppliesTheResult(t *testing.T) {
+	id := uuid.New()
+	h := &store.Host{}
+	status, _ := waitForCert(context.Background(), h, time.Now().Add(time.Minute), func(own *store.Host) (int, string) {
+		own.CertID = &id
+		return 0, ""
+	})
+	if status != 0 || h.CertID == nil || *h.CertID != id {
+		t.Fatalf("status %d, cert %v", status, h.CertID)
+	}
+}
+
+// The response has to go out in time even though the order cannot be stopped.
+func TestWaitForCertAnswersAtTheDeadline(t *testing.T) {
+	release, ended := make(chan struct{}), make(chan struct{})
+	id := uuid.New()
+	h := &store.Host{}
+	status, msg := waitForCert(context.Background(), h, time.Now().Add(20*time.Millisecond), func(own *store.Host) (int, string) {
+		<-release
+		own.CertID = &id
+		close(ended)
+		return 0, ""
+	})
+	if status != http.StatusGatewayTimeout || !strings.Contains(msg, "import the file again") {
+		t.Fatalf("status %d, %q", status, msg)
+	}
+	if h.CertID != nil {
+		t.Fatal("a host left out of the import was given a certificate")
+	}
+	close(release) // the order carries on and finishes
+	<-ended
+}
+
+// A client that left needs no answer, and giving up would strand the
+// certificate: the wait runs on past the deadline so the host can be saved.
+func TestWaitForCertSeesTheOrderThroughForAGoneClient(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	id := uuid.New()
+	h := &store.Host{}
+	status, _ := waitForCert(ctx, h, time.Now().Add(10*time.Millisecond), func(own *store.Host) (int, string) {
+		time.Sleep(60 * time.Millisecond)
+		own.CertID = &id
+		return 0, ""
+	})
+	if status != 0 || h.CertID == nil {
+		t.Fatalf("status %d, cert %v: the order was abandoned", status, h.CertID)
 	}
 }
