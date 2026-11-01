@@ -3,8 +3,18 @@
 Migrations run on API boot inside a transaction. Pull the new api image and
 recreate it so it applies pending SQL, then roll the proxy and web.
 
-## Unreleased
+## 1.8.1
 
+- **Import issues certificates.** TLS Auto hosts in an import now get a
+  certificate as they are added. A host that cannot get one, such as one whose
+  DNS does not point here yet, is reported and left out. An entry that gives
+  an access list or WAF profile by id, with no name, is left out too.
+- **The API refuses malformed ids.** `access_list_id`, `waf_profile_id` and
+  `cert_id` must be a UUID or empty on a host. They used to be read as none.
+- **Analytics gains two groups.** `GET /api/analytics/rollups` takes
+  `group=host_bucket` and `GET /api/analytics/geo` takes `group=country`.
+- **New metric.** `aegis_proxy_telemetry_dropped_total` counts events a node
+  lost. Alert on it growing.
 - **Images are published** to `ghcr.io/zypher-systems/aegis-api`,
   `aegis-proxy`, and `aegis-web` (`linux/amd64` and `linux/arm64`). See
   [Install a published image](#install-a-published-image).

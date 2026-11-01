@@ -2,6 +2,53 @@
 
 All notable changes to Aegis are documented in this file.
 
+## [Unreleased] — 1.8.1
+
+Fixes from a code review: protection that a bad id could remove, a webhook
+secret in the logs, imports without certificates, lost telemetry, and totals
+that looked complete and were not.
+
+### Fixed
+
+- **A bad id no longer takes protection off a host.** Creating or editing a
+  host with a malformed `access_list_id`, `waf_profile_id` or `cert_id` is
+  refused with a 400. It used to be read as "none", which on an edit removed
+  the access list or WAF profile. An empty value still clears the field.
+- **Webhook errors no longer reveal the webhook URL.** A failed delivery wrote
+  the full URL, secret path and query included, to the API log, and the
+  Settings test button showed it. Only the cause of the failure is kept now.
+- **Imported hosts get their certificates.** Import saved TLS Auto hosts
+  without requesting one, so on a fresh install it reported success while
+  HTTPS had no valid certificate and nothing would ever issue one. It now
+  issues them as adding a host by hand does, and a host that cannot get one is
+  reported and left out. Hosts that are skipped order nothing. Issuance runs
+  during the import, so a large one on Let's Encrypt stops after three minutes
+  and reports the hosts it did not reach; importing the file again continues.
+- **Import no longer drops protection given only by id.** An entry with an
+  `access_list_id` or `waf_profile_id` but no name, such as a copy of the API's
+  host JSON, was imported without it. It is now reported and left out.
+- **Telemetry keeps up with busy nodes.** A node sent at most 320 events a
+  second and lost the rest once its buffer filled, undercounting traffic and
+  losing security details. It now sends everything queued, ten times a second.
+  The API wrote a node's `last_seen` for every event, which capped it at the
+  rate Postgres commits; that is now once per node every 10 seconds.
+  `aegis_proxy_telemetry_dropped_total` counts what a node still loses.
+- **Analytics and Hosts no longer show partial totals as complete.** Both read
+  stored rollups, capped at 2000 rows, and ignored the cap. Analytics now reads
+  `group=bucket` and Hosts the new `group=host_bucket` (one or two rows per
+  host and hour, up to 25,000 rows), and both say so if a response is still
+  cut. `GET /api/analytics/geo` takes `group=country`, which Analytics now
+  uses for its map and country list: stored rows are cut at 4000, and that was
+  not reported at all.
+- **A refused user edit changes nothing.** A password under 10 characters
+  returned an error after the new email and name were already saved. The
+  password is checked first, and all of it is saved in one write.
+
+### Security
+
+- **go-jose 4.1.6** fixes CVE-2026-116587, a denial of service through crafted
+  RSA parameters in a JWK.
+
 ## [Unreleased] — 1.8.0
 
 The Graphite theme with a light alternate, and an Overview that says more.
@@ -56,8 +103,6 @@ The Graphite theme with a light alternate, and an Overview that says more.
   fix for CVE-2026-111943, -78667, -78669 or -97031), with
   `golang.org/x/net` 0.60.0.
 - **Coraza 3.8.1** fixes CVE-2026-107826 and CVE-2026-41510 in the WAF.
-- **go-jose 4.1.6** fixes CVE-2026-116587, a denial of service through crafted
-  RSA parameters in a JWK.
 - **Next.js 15.5.28** fixes an unauthenticated remote code execution in the
   image optimizer (GHSA-2464-fhr4-w9xw) and CVE-2026-94482, and the CVEs
   that were ignored for 15.5.25. Next's pinned `postcss` 8.4.31 is
@@ -65,42 +110,6 @@ The Graphite theme with a light alternate, and an Overview that says more.
   `source-map-js` 1.2.2.
 - **No npm in the web image.** The dashboard runs `node server.js`; the
   base image's npm is removed.
-
-### Fixed
-
-- **A bad id no longer takes protection off a host.** Creating or editing a
-  host with a malformed `access_list_id`, `waf_profile_id` or `cert_id` is
-  refused with a 400. It used to be read as "none", which on an edit removed
-  the access list or WAF profile. An empty value still clears the field.
-- **Webhook errors no longer reveal the webhook URL.** A failed delivery wrote
-  the full URL, secret path and query included, to the API log, and the
-  Settings test button showed it. Only the cause of the failure is kept now.
-- **Imported hosts get their certificates.** Import saved TLS Auto hosts
-  without requesting one, so on a fresh install it reported success while
-  HTTPS had no valid certificate and nothing would ever issue one. It now
-  issues them as adding a host by hand does, and a host that cannot get one is
-  reported and left out. Hosts that are skipped order nothing. Issuance runs
-  during the import, so a large one on Let's Encrypt stops after three minutes
-  and reports the hosts it did not reach; importing the file again continues.
-- **Import no longer drops protection given only by id.** An entry with an
-  `access_list_id` or `waf_profile_id` but no name, such as a copy of the API's
-  host JSON, was imported without it. It is now reported and left out.
-- **Telemetry keeps up with busy nodes.** A node sent at most 320 events a
-  second and lost the rest once its buffer filled, undercounting traffic and
-  losing security details. It now sends everything queued, ten times a second.
-  The API wrote a node's `last_seen` for every event, which capped it at the
-  rate Postgres commits; that is now once per node every 10 seconds.
-  `aegis_proxy_telemetry_dropped_total` counts what a node still loses.
-- **Analytics and Hosts no longer show partial totals as complete.** Both read
-  stored rollups, capped at 2000 rows, and ignored the cap. Analytics now reads
-  `group=bucket` and Hosts the new `group=host_bucket` (one or two rows per
-  host and hour, up to 25,000 rows), and both say so if a response is still
-  cut. `GET /api/analytics/geo` takes `group=country`, which Analytics now
-  uses for its map and country list: stored rows are cut at 4000, and that was
-  not reported at all.
-- **A refused user edit changes nothing.** A password under 10 characters
-  returned an error after the new email and name were already saved. The
-  password is checked first, and all of it is saved in one write.
 
 ## [Unreleased] — 1.7.2
 

@@ -2,7 +2,7 @@ name: CI
 
 # Pushes and pull requests run the checks, build the api, proxy, and web
 # images, and exercise them with the happy-path. A push to main publishes
-# linux/amd64 and linux/arm64 to GHCR. Tags follow VERSION (1.8.0, 1.8,
+# linux/amd64 and linux/arm64 to GHCR. Tags follow VERSION (1.8.1, 1.8,
 # latest) plus sha-<commit>. The firewall bouncer is not published.
 on:
   push:

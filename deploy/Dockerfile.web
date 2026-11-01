@@ -17,7 +17,7 @@ RUN pnpm build
 
 FROM node:22-alpine AS run
 WORKDIR /app
-ARG AEGIS_VERSION=1.8.0
+ARG AEGIS_VERSION=1.8.1
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0 AEGIS_VERSION=$AEGIS_VERSION
 # The runtime only runs node server.js; drop the base image's bundled npm so
 # its dependencies don't ship (and get scanned) with the dashboard.
