@@ -6,11 +6,12 @@ A security-first reverse proxy: a Go edge, a control plane, and a dashboard for 
 
 ## Deploy
 
-Docker and Docker Compose are the only requirements.
+Docker and Docker Compose are the only requirements. You do not need Git or the source code: this downloads `compose.yaml`, `.env.example` and the `deploy` folder, about 60 KB.
 
 ```sh
-git clone https://github.com/zypher-systems/aegis.git
-cd aegis
+mkdir aegis && cd aegis
+curl -fsSL https://github.com/zypher-systems/aegis/archive/refs/heads/main.tar.gz \
+  | tar -xz --strip-components=1 --wildcards '*/compose.yaml' '*/.env.example' '*/deploy/*'
 cp .env.example .env
 ```
 
@@ -75,9 +76,13 @@ These screenshots use demo data.
 ## Updating
 
 ```sh
+curl -fsSL https://github.com/zypher-systems/aegis/archive/refs/heads/main.tar.gz \
+  | tar -xz --strip-components=1 --wildcards '*/compose.yaml' '*/.env.example' '*/deploy/*'
 docker compose pull api proxy web
 docker compose up -d
 ```
+
+The download refreshes `compose.yaml` and `deploy`. Your `.env` is not touched. If you pinned an image in `compose.yaml`, set it again afterwards.
 
 Keep the Docker volumes, `AEGIS_SECRET_KEY`, and `POSTGRES_PASSWORD`. Replacing an older checkout is covered in [docs/upgrade.md](docs/upgrade.md).
 
